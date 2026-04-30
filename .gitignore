@@ -1,0 +1,22 @@
+# Dependencies / build outputs
+node_modules/
+dist/
+build/
+bin/
+obj/
+
+# Local Claude settings
+.claude/settings.local.json
+
+# Secrets / local auth files
+*.secret.*
+auth*.json
+*.env
+.env
+.env.*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
