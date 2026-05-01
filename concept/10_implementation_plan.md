@@ -2,7 +2,15 @@
 
 ## Status
 
-Not approved for code generation yet.
+Pending user approval for code generation.
+
+All concept files are MVP-stable. ADRs 0001–0006 are accepted. Open questions OQ-001 through OQ-044 are Applied or In Review without blocking MVP Phase 1.
+
+To unlock code generation, the user must explicitly say:
+
+```text
+Concept freeze accepted. Start Phase 1 implementation.
+```
 
 This document defines the planned implementation increments. It does not yet authorize product code.
 
@@ -75,12 +83,13 @@ Goal:
 - preflight display
 - dashboard placeholders
 - CLI invocation abstraction
+- system tray icon and context menu (background running; confirmed MVP by OQ-043)
 
 ## Phase 5: History
 
 Goal:
 
-- store scan results
+- store scan results as JSON files (decided by ADR-0004; SQLite in Phase 2)
 - compare scans
 - show changes over time
 
@@ -89,9 +98,10 @@ Goal:
 Goal:
 
 - configure workspace per environment
-- execute KQL
+- execute KQL with user-configurable look-back window (`--days`)
 - summarize app/secret usage
 - show last-seen and old-key usage
+- surface raw IP addresses (source IP enrichment with Azure resource data is post-Phase 6)
 
 ## Phase 7: Guided Rotation
 

@@ -41,17 +41,20 @@ Fields:
 
 ### EnvironmentProfile
 
-Represents a named operational context.
+Represents a named operational context within a tenant.
 
 Fields:
 
 - `environmentId`
 - `tenantId`
-- `name`
-- `type` such as DEV, TEST, PROD, UNKNOWN
+- `name` — user-defined slug, free text (e.g. `prod`, `test`, `contoso-prod`)
 - `notes`
 - `logAnalyticsWorkspaceId`
 - `defaultDaysForUsageAnalysis`
+
+Display name in UI is composed from tenant metadata and the user-defined slug, for example: `Contoso — prod`.
+
+There is no pre-defined type enum. Users label environments freely. DEV / TEST / PROD are examples, not enforced values.
 
 ### AppRegistrationSummary
 

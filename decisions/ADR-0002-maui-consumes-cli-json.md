@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -31,6 +31,14 @@ Negative:
 - process invocation must be handled carefully
 - JSON schema compatibility matters
 - CLI installation/bundling must be decided
+
+## CLI bundling
+
+The MAUI Blazor app bundles the npm CLI binary for MVP.
+
+The CLI must also be usable as a standalone npm package independent of MAUI.
+
+No HTTP bridge is needed for MVP. Process invocation with JSON output is the only integration boundary.
 
 ## Follow-up
 

@@ -37,7 +37,8 @@ auth/
 config/
   TenantProfile
   EnvironmentProfile
-  ConfigStore abstraction
+  ConfigStore abstraction   // reads/writes JSON cache; never stores secret values
+  CredentialStore abstraction // delegates to OS credential storage
 
 graph/
   GraphApplicationReader
@@ -73,15 +74,15 @@ errors/
 
 ## Authentication Modes
 
-Initial concepts:
+**Decided by OQ-010:** Client Secret, Device Code and Interactive Browser are mandatory for MVP.
 
-| Mode | Description | Redirect URI needed |
-|---|---|---|
-| Client Secret | App-only service authentication | No |
-| Certificate | App-only service authentication | No |
-| Device Code | Interactive user login without local redirect | No |
-| Interactive Browser | User login via browser and loopback redirect | Yes, localhost redirect |
-| Azure CLI Credential | Optional developer convenience | No app-specific redirect in this tool |
+| Mode | MVP | Description | Redirect URI needed |
+|---|---|---|---|
+| Client Secret | Mandatory | App-only service authentication | No |
+| Device Code | Mandatory | Interactive user login without local redirect | No |
+| Interactive Browser | Mandatory | OAuth authorization code flow via browser and loopback redirect | Yes, localhost redirect |
+| Certificate | Optional | App-only service authentication with certificate | No |
+| Azure CLI Credential | Optional | Developer convenience; delegates to `az` CLI token cache | No |
 
 ## Library Boundary
 
@@ -123,6 +124,16 @@ and return a stable schema with:
   "errors": []
 }
 ```
+
+## Local Config Cache
+
+**Decided by OQ-011:** The CLI stores tenant profiles in a local JSON cache directory.
+
+Rules:
+- Non-sensitive profile data (tenant ID, display name, environment slug, auth mode, workspace ID) is stored in JSON files.
+- Secret values (client secret key material) must never be stored in plain JSON files. They must be stored in the OS credential store.
+- **Decided by OQ-012 and ADR-0005:** The npm CLI uses `keytar` (Windows Credential Manager) for storing client secret values.
+- The cache directory location defaults to a platform-appropriate user data folder and can be overridden with `--config-dir`.
 
 ## Important Design Decision
 

@@ -5,9 +5,11 @@
 | Context | Name |
 |---|---|
 | Repository / project folder | `AzureAppRegistrationSecretMonitor` |
-| Short name | `ASM` |
-| User-facing name | `Entra App Registration Secret Monitor` |
-| Working CLI command | `asm` |
+| GitHub repository | `brunsforge/azure-app-registration-monitor` |
+| npm package | `@brunsforge/azure-app-registration-monitor` |
+| Short name | `AARM` |
+| User-facing name | `Azure App Registration Monitor` |
+| CLI binary | `aarm` |
 
 ## Repository areas
 
@@ -57,19 +59,11 @@ update-references.md
 
 ## npm package naming
 
-Package name candidate:
+Package name (decided by ADR-0003):
 
 ```text
-@brunsforge/entra-secret-monitor
+@brunsforge/azure-app-registration-monitor
 ```
-
-Alternative:
-
-```text
-@brunsforge/azure-app-secret-monitor
-```
-
-The final npm package name should be confirmed by ADR before publishing.
 
 ## TypeScript naming draft
 

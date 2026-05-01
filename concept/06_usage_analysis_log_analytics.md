@@ -47,10 +47,13 @@ The tool must therefore produce evidence and remediation hints, not pretend cert
 
 ## KQL: App Usage
 
+Look-back window is user-configurable via `--days` parameter (decided by OQ-040). Default: 90 days.
+
 ```kusto
 let clientId = "<client-id>";
+let lookBackWindow = <days>d; // substituted at query construction time
 AADServicePrincipalSignInLogs
-| where TimeGenerated > ago(360d)
+| where TimeGenerated > ago(lookBackWindow)
 | where AppId == clientId
 | project
     TimeGenerated,
@@ -71,8 +74,9 @@ AADServicePrincipalSignInLogs
 
 ```kusto
 let keyId = "<secret-key-id>";
+let lookBackWindow = <days>d;
 AADServicePrincipalSignInLogs
-| where TimeGenerated > ago(360d)
+| where TimeGenerated > ago(lookBackWindow)
 | where ServicePrincipalCredentialKeyId == keyId
 | summarize
     LastSeen = max(TimeGenerated),
@@ -131,6 +135,12 @@ The tool should summarize:
 - credential key IDs used
 - possible stale old key usage
 - evidence table
+
+## Source IP Enrichment
+
+**Decided by OQ-042:** Source IP enrichment with Azure resource data is deferred to Phase 2.
+
+Phase 1 surfaces raw IP addresses in the evidence table without enrichment.
 
 ## Heuristics for Likely Location
 

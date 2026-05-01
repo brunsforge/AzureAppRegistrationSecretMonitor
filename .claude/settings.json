@@ -2,5 +2,14 @@
   "env": {
     "ASM_PROJECT_PHASE": "concept",
     "ASM_ALLOW_PRODUCT_CODE": "false"
+  },
+  "permissions": {
+    "deny": [
+      "Read(.git/**)",
+      "Read(CONSISTENCY_REPORT.md)",
+      "Read(**/*.log)",
+      "Read(**/*.key)",
+      "Read(**/*.pem)"
+    ]
   }
 }

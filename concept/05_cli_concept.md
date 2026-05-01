@@ -8,78 +8,72 @@ It must support human usage and machine usage.
 
 ## Naming
 
-Working command name:
+CLI binary (decided by ADR-0003):
 
 ```bash
-asm
+aarm
 ```
-
-Alternative:
-
-```bash
-entra-secret-monitor
-```
-
-Final name is open.
 
 ## Global Options
 
 ```bash
 --tenant <name-or-id>
 --environment <name>
---config <path>
+--config-dir <path>
 --output table|json|markdown|csv
 --verbose
 --debug
 --no-color
 ```
 
+`--config-dir` overrides the default cache directory for tenant profiles and config files.
+
 ## Tenant Commands
 
 ```bash
-asm tenants list
-asm tenants add
-asm tenants validate
-asm tenants remove
+aarm tenants list
+aarm tenants add
+aarm tenants validate
+aarm tenants remove
 ```
 
 ## Preflight Commands
 
 ```bash
-asm preflight run --tenant prod
-asm preflight show --tenant prod
-asm preflight explain --tenant prod
+aarm preflight run --tenant prod
+aarm preflight show --tenant prod
+aarm preflight explain --tenant prod
 ```
 
 ## App and Secret Commands
 
 ```bash
-asm apps list
-asm apps show --appId <client-id>
+aarm apps list
+aarm apps show --app-id <client-id>
 
-asm secrets list
-asm secrets expiring --days 30
-asm secrets expiring --months 3
-asm secrets expired
-asm secrets show --appId <client-id>
-asm secrets show-key --keyId <secret-key-id>
+aarm secrets list
+aarm secrets expiring --days 30
+aarm secrets expiring --months 3
+aarm secrets expired
+aarm secrets show --app-id <client-id>
+aarm secrets show-key --key-id <secret-key-id>
 ```
 
 ## Usage Analysis Commands
 
 ```bash
-asm usage analyze --appId <client-id> --days 360
-asm usage analyze-secret --keyId <secret-key-id> --days 360
-asm usage last-seen --appId <client-id>
-asm usage rotation-check --appId <client-id> --oldKeyId <secret-key-id> --days 14
+aarm usage analyze --app-id <client-id> --days 360
+aarm usage analyze-secret --key-id <secret-key-id> --days 360
+aarm usage last-seen --app-id <client-id>
+aarm usage rotation-check --app-id <client-id> --old-key-id <secret-key-id> --days 14
 ```
 
 ## Report Commands
 
 ```bash
-asm report expiring --months 3 --output markdown
-asm report tenant-summary --output json
-asm report findings --severity high --output csv
+aarm report expiring --months 3 --output markdown
+aarm report tenant-summary --output json
+aarm report findings --severity high --output csv
 ```
 
 ## Expected Exit Codes

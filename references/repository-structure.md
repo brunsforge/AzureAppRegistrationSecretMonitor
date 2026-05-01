@@ -35,25 +35,18 @@ frontend/
 backend/
 ```
 
-## Future implementation structure candidates
+## Implementation structure
 
-These are candidates only. They must not be created before concept freeze.
+Decided by ADR-0006:
 
 ```text
 packages/
-  npm-core/
-  cli/
+  core/          ← npm library (@brunsforge/azure-app-registration-monitor)
+  cli/           ← CLI entry point (aarm binary)
 apps/
-  maui-blazor/
+  maui-blazor/   ← .NET MAUI Blazor desktop application
 ```
 
-or:
+`packages/` uses npm workspaces. `apps/maui-blazor/` is a .NET solution outside the npm workspace.
 
-```text
-src/
-  npm/
-  cli/
-  maui-blazor/
-```
-
-A final implementation layout requires an ADR.
+These folders must not be created until Phase 1 implementation is explicitly approved by the user.

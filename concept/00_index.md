@@ -19,16 +19,16 @@ CLAUDE.md
 
 | File | Status | Owner mode | Primary purpose | Must read before |
 |---|---|---|---|---|
-| `01_project_vision.md` | Draft | Claude-assisted | Product vision, scope and boundaries | all major planning |
-| `02_domain_model.md` | Draft | Claude-assisted | Shared language and core entities | permissions, npm, CLI, UI |
-| `03_permissions_and_preflight.md` | Critical draft | Claude-assisted | Permissions, capability model and security gates | npm, CLI, UI |
-| `04_npm_library_concept.md` | Draft | Claude-assisted | npm library architecture and module boundaries | CLI, UI integration |
-| `05_cli_concept.md` | Draft | Claude-assisted | CLI command surface and automation behavior | MAUI integration, implementation |
-| `06_usage_analysis_log_analytics.md` | Draft | Claude-assisted | KQL, Log Analytics and usage analysis | UI analytics, implementation |
-| `07_maui_blazor_ui_concept.md` | Draft | Claude-assisted | Desktop UI architecture and screens | mockups, implementation |
-| `08_mockups.md` | Draft | Claude-assisted | Textual UI sketches | implementation |
+| `01_project_vision.md` | MVP-stable | Claude-assisted | Product vision, scope and boundaries | all major planning |
+| `02_domain_model.md` | MVP-stable | Claude-assisted | Shared language and core entities | permissions, npm, CLI, UI |
+| `03_permissions_and_preflight.md` | MVP-stable | Claude-assisted | Permissions, capability model and security gates | npm, CLI, UI |
+| `04_npm_library_concept.md` | MVP-stable | Claude-assisted | npm library architecture and module boundaries | CLI, UI integration |
+| `05_cli_concept.md` | MVP-stable | Claude-assisted | CLI command surface and automation behavior | MAUI integration, implementation |
+| `06_usage_analysis_log_analytics.md` | MVP-stable | Claude-assisted | KQL, Log Analytics and usage analysis | UI analytics, implementation |
+| `07_maui_blazor_ui_concept.md` | MVP-stable | Claude-assisted | Desktop UI architecture and screens | mockups, implementation |
+| `08_mockups.md` | MVP-stable | Claude-assisted | Textual UI sketches | implementation |
 | `09_open_questions.md` | Active | Claude-maintained | Unresolved questions and assumptions | every planning update |
-| `10_implementation_plan.md` | Not approved | Claude-assisted | Implementation increments after concept stabilization | product code |
+| `10_implementation_plan.md` | Pending approval | Claude-assisted | Implementation increments after concept stabilization | product code |
 | `11_skills_and_agents_plan.md` | Active | Claude-assisted | Claude skills, agents and command conventions | orchestration changes |
 | `99_orchestration.md` | Active | Manual-owned | How Claude should route and maintain work | every command |
 
@@ -56,6 +56,7 @@ CLAUDE.md
 | `/refine-ui` | Refine MAUI Blazor UI screens and mockups |
 | `/review-consistency` | Review consistency across all planning files |
 | `/update-open-questions` | Maintain unresolved assumptions and questions |
+| `/apply-answered-questions` | Propagate answered open questions into affected concept, ADR and reference files |
 | `/record-decision` | Create or update ADRs |
 | `/update-references` | Maintain durable conventions and factual references |
 | `/prepare-implementation` | Check implementation readiness |

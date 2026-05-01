@@ -112,3 +112,44 @@ Required:
 - Route Service Principal Sign-in Logs to Log Analytics
 - Grant Log Analytics Reader or Monitoring Reader
 ```
+
+## Section 7 — Tenant Add / Edit Form
+
+```text
++--------------------------------------------------------------+
+| Add Tenant                                                   |
++--------------------------------------------------------------+
+| Display Name:   [Contoso PROD             ]                  |
+| Tenant ID:      [<tenant-id>              ]                  |
+| Environment:    [PROD                     ]                  |
+| Auth Mode:      ( ) Client Secret                            |
+|                 ( ) Certificate                              |
+|                 (•) Interactive Browser                      |
+|                 ( ) Device Code                              |
+|                                                              |
+| Log Analytics Workspace ID:                                  |
+|                 [<workspace-id>           ] (optional)       |
+|                                                              |
+| [Cancel]                           [Validate] [Save Tenant]  |
++--------------------------------------------------------------+
+```
+
+## Section 8 — History
+
+```text
++--------------------------------------------------------------+
+| History — Contoso PROD                                       |
++--------------------------------------------------------------+
+| Scan Date     Apps   Secrets  Expired  Expiring  Findings    |
+| 2026-04-30    142    231      3        8         5 HIGH       |
+| 2026-04-28    141    230      2        9         4 HIGH       |
+| 2026-04-15    139    228      1        12        3 MEDIUM     |
+|                                                              |
+| [View Scan Details] [Compare with Previous] [Export]         |
+|                                                              |
+| Changes since last scan:                                     |
+| + 1 App Registration added                                   |
+| + 1 Secret added (CRM Connector)                             |
+| - 1 Secret expiry window moved to HIGH                       |
++--------------------------------------------------------------+
+```

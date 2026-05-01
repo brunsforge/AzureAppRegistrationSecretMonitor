@@ -41,6 +41,7 @@ Commands are the user-facing entry points.
 | `/refine-ui` | Refine MAUI Blazor UI and mockups | `07`, `08`, UI references |
 | `/review-consistency` | Check contradictions across all planning files | all concept/ADR/reference files |
 | `/update-open-questions` | Maintain unresolved questions | `09_open_questions` |
+| `/apply-answered-questions` | Apply answered questions consistently | `09_open_questions`, impacted concept/ADR/reference files |
 | `/record-decision` | Create/update ADRs | `/decisions` |
 | `/update-references` | Maintain durable conventions/facts | `/references` |
 | `/prepare-implementation` | Check if implementation may start | `10_implementation_plan` |
@@ -89,6 +90,7 @@ Suggested first checks:
 /project-check
 /review-consistency
 /update-references
+/apply-answered-questions
 ```
 
 Skill improvement rules:

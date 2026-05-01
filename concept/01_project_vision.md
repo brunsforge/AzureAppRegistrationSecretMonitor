@@ -52,6 +52,8 @@ It should:
 - show dashboards and details
 - hide or disable features based on capability results
 - guide users through analysis and rotation planning
+- run in the background once closed
+- show a tray icon with context menu entries
 
 ## MVP Scope
 
@@ -67,8 +69,9 @@ MVP includes:
 - CLI command design
 - JSON output schema
 - MAUI Blazor screen concept
-- local history concept
-- usage analysis concept, even if implementation comes after initial secret listing
+- local history concept (JSON files; SQLite in Phase 2)
+- usage analysis concept (concept complete in planning; implementation in Phase 2 after secret listing MVP)
+- system tray (background running and tray icon with context menu; confirmed MVP by OQ-043)
 
 ## Explicit Non-MVP
 

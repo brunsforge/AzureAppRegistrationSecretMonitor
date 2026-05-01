@@ -7,13 +7,14 @@ The UI provides a local desktop application for users who do not want to work di
 ## Technology
 
 - .NET MAUI Blazor Hybrid
-- Local desktop app
+- Local desktop app (Windows primary target)
 - Local history store
 - CLI process integration for secret scanning and usage analysis
+- System tray integration: app runs in background when closed, tray icon with context menu
 
 ## MVP Integration with npm CLI
 
-Preferred integration:
+Decided by OQ-020 and OQ-022:
 
 1. User configures tenant/environment in the UI.
 2. UI calls the npm CLI as a local process.
@@ -22,7 +23,9 @@ Preferred integration:
 5. UI stores results locally.
 6. UI renders dashboard/detail screens.
 
-This avoids embedding Node.js directly in MAUI for MVP.
+The MAUI app bundles the npm CLI binary for MVP. No HTTP bridge is used.
+
+The CLI is also independently usable as a standalone npm package outside MAUI.
 
 ## Main Screens
 
@@ -155,10 +158,25 @@ Examples:
 
 ## Local Storage
 
-Potential options:
+Decided by OQ-021 and ADR-0004:
 
-- SQLite for history and queryable results
-- JSON files for early prototype
-- OS credential store for sensitive local auth references
+| Phase | Storage | Purpose |
+|---|---|---|
+| Phase 1 (MVP) | JSON files | Scan results, history, tenant profiles |
+| Phase 2 | SQLite | Queryable history, diff comparisons, advanced reporting |
+| Both phases | OS credential store | Sensitive credential values (client secret key material) |
 
-No clear-text secrets in local app settings.
+No clear-text secrets in local app settings or JSON files.
+
+## System Tray
+
+The app runs in the background after the main window is closed.
+
+A system tray icon provides a minimal context menu. Candidate entries:
+
+- Open
+- Run Scan (all tenants)
+- Show Expiring Secrets
+- Exit
+
+Tray behavior is confirmed MVP scope (decided by OQ-043).

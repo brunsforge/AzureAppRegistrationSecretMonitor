@@ -56,6 +56,8 @@ Potentially needed later:
 | Query Log Analytics | Verify workspace query access. |
 | Check Service Principal Logs | Verify `AADServicePrincipalSignInLogs` exists and returns metadata or rows. |
 | Write Secret Test | Later phase; verify whether secret creation would be allowed, ideally without mutation first. |
+| Read Azure Resources | Verify Azure Resource Manager API access (for IP-to-resource enrichment). |
+| Read Key Vault Metadata | Verify Key Vault read access (for Key Vault secret scanning). |
 
 ## Capability Result Shape
 
@@ -71,11 +73,14 @@ Potentially needed later:
     "canReadApplicationSecrets": true,
     "canReadServicePrincipals": true,
     "canReadOwners": false,
+    "canReadDirectory": false,
     "canQueryLogAnalytics": true,
     "canAnalyzeServicePrincipalSignIns": true,
     "canCreateApplicationSecrets": false,
     "canDeleteApplicationSecrets": false,
-    "canCreateApplications": false
+    "canCreateApplications": false,
+    "canReadAzureResources": false,
+    "canReadKeyVaultMetadata": false
   },
   "missingPermissions": [
     "Directory.Read.All"
@@ -95,11 +100,15 @@ Potentially needed later:
 | `canReadApplications=false` | App list unavailable, show setup guidance. |
 | `canReadApplicationSecrets=false` | Secret columns unavailable, show missing permission. |
 | `canReadOwners=false` | Owner column hidden or marked unavailable. |
+| `canReadServicePrincipals=false` | Service Principal enrichment unavailable; app and owner details may be incomplete. |
+| `canReadDirectory=false` | Directory user information unavailable; owner user details cannot be resolved. |
 | `canQueryLogAnalytics=false` | Usage Analysis tab disabled. |
 | `canAnalyzeServicePrincipalSignIns=false` | Credential last-seen unavailable. |
 | `canCreateApplicationSecrets=false` | Create Secret button hidden/disabled. |
 | `canDeleteApplicationSecrets=false` | Delete Secret button hidden/disabled. |
 | `canCreateApplications=false` | App Registration creation hidden. |
+| `canReadAzureResources=false` | Azure resource enrichment unavailable; source IP cannot be mapped to Azure services. |
+| `canReadKeyVaultMetadata=false` | Key Vault secret scanning unavailable. |
 
 ## Important Security Rule
 
@@ -107,6 +116,23 @@ The MVP must work in read-only mode.
 
 Write functions must never be shown simply because the application supports them. They must be enabled only after a successful capability check for the current tenant/environment.
 
+## Admin Consent Detection
+
+**Decided by OQ-032:** Use preflight + catch approach.
+
+The preflight service must not assume admin consent is present. It must detect missing consent by attempting each capability check and handling errors:
+
+1. Attempt the corresponding Graph or Azure API call for each capability.
+2. On HTTP 403 or 401 with `consent_required`, `interaction_required` or `insufficient_privileges` error codes, mark the capability as unavailable and record the missing permission.
+3. On success, mark the capability as available.
+4. Populate `missingPermissions` and `warnings` in the `PreflightResult` from all failed checks.
+
+This means the preflight service is also the consent-state detector. No separate consent inspection is needed.
+
 ## Open Design Topic
 
 The exact mapping between Graph permission, delegated user role and successful operation must be validated in implementation tests. The concept model should remain explicit and test-driven.
+
+`Directory.Read.All` as the required permission for reading owners is an assumption. It must be validated at implementation time (see OQ-030).
+
+Azure RBAC role for Log Analytics workspace access (Log Analytics Reader or Monitoring Reader) must be validated at implementation time (see OQ-031).

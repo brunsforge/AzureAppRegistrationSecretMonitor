@@ -72,6 +72,7 @@ For every user request, classify it into one of:
 | MAUI UI | `concept/07_maui_blazor_ui_concept.md` | `maui-blazor-ui-design` | `/refine-ui` |
 | mockups | `concept/08_mockups.md` | `maui-blazor-ui-design` | `/refine-ui` |
 | open questions | `concept/09_open_questions.md` | `concept-review` | `/update-open-questions` |
+| answered open questions | `concept/09_open_questions.md` + impacted files | `concept-review` | `/apply-answered-questions` |
 | implementation plan | `concept/10_implementation_plan.md` | `implementation-plan-design` | `/prepare-implementation` |
 | skills/agents/commands | `concept/11_skills_and_agents_plan.md` | `concept-orchestrate` | `/project-check` |
 | orchestration | `concept/99_orchestration.md` | `concept-orchestrate` | `/project-check` |
@@ -159,6 +160,12 @@ When an assumption is made:
 
 - add it to `/concept/09_open_questions.md`
 
+When a question is answered:
+
+- keep the question in `concept/09_open_questions.md`
+- set its status to `Answered` or `Decided`
+- run `/apply-answered-questions` before marking it as `Applied`
+
 When an external fact is used:
 
 - add a note to `/references`
@@ -225,6 +232,17 @@ Update `concept/09_open_questions.md` when:
 - a library API shape is not final
 - a feature is postponed but not rejected
 - a reference contains an uncertain platform claim
+
+### Answered-question trigger
+
+Run `/apply-answered-questions` when:
+
+- a user manually answered one or more open questions
+- a question status is `Answered` or `Decided`
+- the answer affects concept, ADR or reference files
+- an answered question must become part of the durable project plan
+
+Do not mark a question as `Applied` until the affected files are updated.
 
 ### Reference trigger
 
