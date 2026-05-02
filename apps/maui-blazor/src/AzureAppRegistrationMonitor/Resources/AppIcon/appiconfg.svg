@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 456 456">
+  <!-- Foreground icon drawn on top of the background colour -->
+
+  <!-- Lock body -->
+  <rect x="148" y="228" width="160" height="120" rx="12" fill="white"/>
+
+  <!-- Lock shackle -->
+  <path d="M180 228 V188 A48 48 0 0 1 276 188 V228" stroke="white" stroke-width="24" fill="none" stroke-linecap="round"/>
+
+  <!-- Keyhole -->
+  <circle cx="228" cy="283" r="16" fill="#512BD4"/>
+  <rect x="220" y="283" width="16" height="24" fill="#512BD4"/>
+</svg>

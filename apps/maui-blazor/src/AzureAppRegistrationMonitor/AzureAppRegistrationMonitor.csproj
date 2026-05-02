@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFrameworks>net9.0-windows10.0.19041.0</TargetFrameworks>
+    <TargetFrameworks>net10.0-windows10.0.19041.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>AzureAppRegistrationMonitor</RootNamespace>
     <UseMaui>true</UseMaui>
@@ -12,33 +12,25 @@
     <ApplicationId>com.brunsforge.aarm</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
-    <!-- Unpackaged deployment — no MSIX needed for MVP -->
     <WindowsPackageType>None</WindowsPackageType>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.19041.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.19041.0</TargetPlatformMinVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- MAUI core -->
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-    <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
-    <!-- Blazor Hybrid WebView -->
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
-    <!-- System tray icon (confirmed MVP by OQ-043) -->
-    <PackageReference Include="H.NotifyIcon.Maui" Version="2.1.0" />
-    <!-- JSON deserialization of CLI output -->
-    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+    <!-- Required for AddDebug() in MauiProgram -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+    <!-- H.NotifyIcon.Maui temporarily disabled — re-enable once base app builds (OQ-043) -->
+    <!-- <PackageReference Include="H.NotifyIcon.Maui" Version="2.4.1" /> -->
   </ItemGroup>
 
   <ItemGroup>
-    <!-- App icon -->
     <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
-    <!-- Splash screen -->
     <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
-    <!-- Fonts -->
     <MauiFont Include="Resources\Fonts\*" />
-    <!-- Images -->
     <MauiImage Include="Resources\Images\*" />
-    <!-- Raw assets (tray icon) -->
     <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 

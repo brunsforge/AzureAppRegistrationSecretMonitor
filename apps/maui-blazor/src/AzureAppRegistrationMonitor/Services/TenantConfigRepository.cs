@@ -38,7 +38,8 @@ public class TenantConfigRepository
         try
         {
             var json = await File.ReadAllTextAsync(TenantsFilePath);
-            return JsonSerializer.Deserialize<List<TenantProfile>>(json, JsonOptions)
+            // Deserialize directly to IReadOnlyList to avoid the List<T>? vs T[] nullability conflict
+            return JsonSerializer.Deserialize<IReadOnlyList<TenantProfile>>(json, JsonOptions)
                    ?? Array.Empty<TenantProfile>();
         }
         catch (JsonException)

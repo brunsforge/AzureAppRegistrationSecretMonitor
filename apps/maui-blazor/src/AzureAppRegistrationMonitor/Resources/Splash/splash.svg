@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background is set by Color="#512BD4" in the .csproj — this SVG is the content layer -->
+
+  <!-- Lock body -->
+  <rect x="176" y="240" width="160" height="120" rx="12" fill="white"/>
+
+  <!-- Lock shackle -->
+  <path d="M208 240 V200 A48 48 0 0 1 304 200 V240" stroke="white" stroke-width="24" fill="none" stroke-linecap="round"/>
+
+  <!-- Keyhole -->
+  <circle cx="256" cy="295" r="16" fill="#512BD4"/>
+  <rect x="248" y="295" width="16" height="24" fill="#512BD4"/>
+</svg>

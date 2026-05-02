@@ -11,8 +11,8 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
 
         builder
-            .UseMaui()
-            .UseSystemTrayIcon()           // H.NotifyIcon.Maui — confirmed MVP by OQ-043
+            .UseMauiApp<App>()          // correct MAUI entry point
+            // .UseNotifyIcon()         // H.NotifyIcon.Maui — re-enable once base app builds (OQ-043)
             .ConfigureFonts(fonts =>
             {
                 // Add custom fonts here once .ttf files are placed in Resources/Fonts/

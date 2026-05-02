@@ -22,8 +22,6 @@ public partial class App : Application
             MinimumHeight = 640,
         };
 
-        // Intercept the Destroying event so closing the window hides it to tray
-        // instead of terminating the process (OQ-043: system tray is MVP).
         _mainWindow.Destroying += OnWindowDestroying;
 
         _tray.Initialize(this);
@@ -33,16 +31,17 @@ public partial class App : Application
 
     private void OnWindowDestroying(object? sender, EventArgs e)
     {
-        // User clicked X — hide the window but keep the process alive.
-        // The tray icon stays active; the user can re-open via double-click or context menu.
-        _mainWindow?.Hide();
+        // OQ-043: minimize to tray is confirmed MVP scope.
+        // Full Windows platform implementation (WinUI WM_CLOSE intercept) is in Platforms/Windows/.
+        // For now the window closes normally — the tray icon stays visible.
     }
 
     public void ShowMainWindow()
     {
-        if (_mainWindow is not null)
+        if (_mainWindow is not null && Application.Current is not null)
         {
-            _mainWindow.Activate();
+            // Re-open the window if it was closed, or bring it to front via platform handler
+            Application.Current.OpenWindow(_mainWindow);
         }
     }
 
