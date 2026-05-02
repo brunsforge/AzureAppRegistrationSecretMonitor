@@ -1,0 +1,166 @@
+@page "/settings"
+@inject TenantConfigRepository TenantRepo
+@inject SettingsService SettingsSvc
+
+<PageTitle>Settings — AARM</PageTitle>
+
+<div class="aarm-page-header">
+    <h1>Settings</h1>
+</div>
+
+@if (_saved)
+{
+    <div class="alert alert-success py-2 mb-3" style="font-size:.85rem">Settings saved.</div>
+}
+
+<!-- ── UI Preferences ────────────────────────────────────────────────────── -->
+<section class="settings-section">
+    <h2>UI Preferences</h2>
+
+    <div class="settings-row">
+        <label>Default tenant</label>
+        <select class="form-select" style="max-width:240px" @bind="SettingsSvc.Settings.DefaultTenant">
+            <option value="">— none —</option>
+            @foreach (var t in _tenants)
+            {
+                <option value="@t.DisplayName">@t.DisplayName</option>
+            }
+        </select>
+        <small>Pre-selected in dropdowns when the app opens.</small>
+    </div>
+
+    <div class="settings-row">
+        <label>Default auth mode for new tenants</label>
+        <select class="form-select" style="max-width:240px" @bind="SettingsSvc.Settings.DefaultAuthMode">
+            <option value="interactive-browser">interactive-browser (opens browser — supports MFA)</option>
+            <option value="device-code">device-code (enter code at microsoft.com/devicelogin — supports MFA)</option>
+            <option value="azure-cli">azure-cli (reuse az login session)</option>
+            <option value="client-secret">client-secret (service principal, configure via CLI)</option>
+            <option value="username-password">username-password (no MFA — configure via CLI)</option>
+            <option value="certificate">certificate (configure via CLI)</option>
+        </select>
+        <small>Pre-selected when adding a tenant from within the UI.</small>
+    </div>
+
+    <div class="settings-row">
+        <label>CLI path override <em>(development)</em></label>
+        <input class="form-control" style="max-width:480px"
+               placeholder="Leave empty for auto-detect — e.g. C:\...\packages\cli\dist\index.js"
+               @bind="SettingsSvc.Settings.CliPathOverride" />
+        <small>Equivalent to the <code>AARM_CLI_PATH</code> environment variable.</small>
+    </div>
+
+    <button class="btn btn-primary btn-sm" @onclick="SaveAsync">Save preferences</button>
+</section>
+
+<!-- ── Configured Tenants ────────────────────────────────────────────────── -->
+<section class="settings-section">
+    <h2>Configured tenants</h2>
+    <p class="text-muted" style="font-size:.8rem">
+        Auth modes that require passwords (<code>client-secret</code>, <code>username-password</code>,
+        <code>certificate</code>) must be configured or reconfigured via the <code>aarm</code> CLI.
+        Non-secret modes can be changed here directly.
+    </p>
+
+    @if (_tenants.Count == 0)
+    {
+        <div class="aarm-empty">No tenants configured. Run <code>aarm tenants add</code> to add one.</div>
+    }
+    else
+    {
+        <table class="aarm-table">
+            <thead>
+                <tr><th>Name</th><th>Tenant ID</th><th>Auth Mode</th><th>Client ID</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var t in _tenants)
+                {
+                    var editing = _editingTenant == t.TenantId;
+                    <tr>
+                        <td><strong>@t.DisplayName</strong></td>
+                        <td><code>@t.TenantId</code></td>
+                        <td>
+                            @if (editing)
+                            {
+                                <select class="form-select form-select-sm" style="max-width:220px"
+                                        @bind="_editAuthMode">
+                                    <option value="interactive-browser">interactive-browser</option>
+                                    <option value="device-code">device-code</option>
+                                    <option value="azure-cli">azure-cli</option>
+                                </select>
+                                <small class="d-block mt-1" style="color:var(--text-muted)">
+                                    Password-bearing modes (client-secret, certificate, username-password) require CLI reconfiguration.
+                                </small>
+                            }
+                            else
+                            {
+                                @t.AuthMode
+                            }
+                        </td>
+                        <td><code style="font-size:.78rem">@(t.ClientId ?? "—")</code></td>
+                        <td>
+                            @if (editing)
+                            {
+                                <button class="btn btn-sm btn-primary me-1" @onclick="() => SaveAuthModeAsync(t.TenantId)">Save</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Cancel</button>
+                            }
+                            else if (IsNonSecretMode(t.AuthMode))
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(t.TenantId, t.AuthMode)">Change mode</button>
+                            }
+                            else
+                            {
+                                <span style="color:var(--text-dim);font-size:.8rem">Use CLI to change</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <div class="mt-3" style="font-size:.8rem;color:var(--text-muted)">
+        To add or remove tenants, or to configure secret-based modes, use the CLI:<br />
+        <code>aarm tenants add</code> &nbsp;·&nbsp;
+        <code>aarm tenants remove "Name"</code>
+    </div>
+</section>
+
+@code {
+    private List<TenantProfile> _tenants = new();
+    private string? _editingTenant;
+    private string _editAuthMode = "interactive-browser";
+    private bool _saved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tenants = (await TenantRepo.ListTenantsAsync()).ToList();
+    }
+
+    private async Task SaveAsync()
+    {
+        await SettingsSvc.SaveAsync();
+        _saved = true;
+        await Task.Delay(2000);
+        _saved = false;
+        StateHasChanged();
+    }
+
+    private void StartEdit(string tenantId, string currentMode)
+    {
+        _editingTenant = tenantId;
+        _editAuthMode  = IsNonSecretMode(currentMode) ? currentMode : "interactive-browser";
+    }
+
+    private void CancelEdit() => _editingTenant = null;
+
+    private async Task SaveAuthModeAsync(string tenantId)
+    {
+        await TenantRepo.UpdateAuthModeAsync(tenantId, _editAuthMode);
+        _tenants = (await TenantRepo.ListTenantsAsync()).ToList();
+        _editingTenant = null;
+    }
+
+    private static bool IsNonSecretMode(string mode) =>
+        mode is "interactive-browser" or "device-code" or "azure-cli";
+}

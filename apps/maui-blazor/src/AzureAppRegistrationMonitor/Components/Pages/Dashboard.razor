@@ -1,34 +1,53 @@
 @page "/dashboard"
 @inject CliExecutionService Cli
 @inject TenantConfigRepository TenantRepo
+@inject HistoryRepository HistoryRepo
+@inject SettingsService SettingsSvc
 
 <PageTitle>Dashboard — AARM</PageTitle>
 
 <div class="aarm-page-header">
     <h1>Dashboard</h1>
-    <select class="form-select aarm-tenant-selector" @onchange="OnTenantChanged">
+
+    <select class="form-select" style="max-width:220px" @bind="_selectedTenant">
         <option value="">— Select tenant —</option>
         @foreach (var t in _tenants)
         {
             <option value="@t.DisplayName">@t.DisplayName</option>
         }
     </select>
-    <button class="btn btn-primary" @onclick="LoadDashboardAsync" disabled="@(string.IsNullOrEmpty(_selectedTenant) || _loading)">
-        Scan
+
+    <button class="btn btn-primary btn-sm"
+            @onclick="ScanAsync"
+            disabled="@(string.IsNullOrEmpty(_selectedTenant) || _loading)">
+        @(_loading ? "Scanning…" : "Scan now")
     </button>
+
+    @if (SettingsSvc.Settings.LastScannedTenant == _selectedTenant && SettingsSvc.Settings.LastScanTime is not null)
+    {
+        <span style="color:var(--text-muted);font-size:.8rem">
+            Last scan: <strong>@SettingsSvc.StalenessText</strong>
+            @if (_fromCache)
+            {
+                <span> · cached</span>
+            }
+        </span>
+    }
 </div>
 
 @if (_loading)
 {
-    <div class="aarm-loading">Scanning secrets…</div>
+    <div class="aarm-loading">
+        Scanning… this may take a moment while your browser opens for authentication.
+    </div>
 }
 else if (_error is not null)
 {
-    <div class="alert alert-danger">@_error</div>
+    <div class="aarm-error">@_error</div>
 }
 else if (_apps is null)
 {
-    <div class="aarm-empty">Select a tenant and click Scan to load the dashboard.</div>
+    <div class="aarm-empty">Select a tenant and click Scan.</div>
 }
 else
 {
@@ -46,66 +65,130 @@ else
             <div class="aarm-card-label">Expired</div>
         </div>
         <div class="aarm-card aarm-card-high">
-            <div class="aarm-card-value">@_appsExpiring30</div>
-            <div class="aarm-card-label">Expiring in 30 days</div>
+            <div class="aarm-card-value">@_expiring30</div>
+            <div class="aarm-card-label">Expiring ≤30 days</div>
         </div>
         <div class="aarm-card aarm-card-medium">
-            <div class="aarm-card-value">@_appsExpiring90</div>
-            <div class="aarm-card-label">Expiring in 90 days</div>
+            <div class="aarm-card-value">@_expiring90</div>
+            <div class="aarm-card-label">Expiring ≤90 days</div>
         </div>
         <div class="aarm-card aarm-card-info">
-            <div class="aarm-card-value">@_withoutOwner</div>
-            <div class="aarm-card-label">Without Owner</div>
+            <div class="aarm-card-value">@_highRiskApps</div>
+            <div class="aarm-card-label">High/Critical apps</div>
         </div>
     </div>
 
-    <div class="aarm-dashboard-actions mt-3">
-        <a class="btn btn-outline-danger" href="/secrets/@Uri.EscapeDataString(_selectedTenant ?? "")">View Secrets</a>
+    <div class="d-flex gap-2 mt-2">
+        <a class="btn btn-outline-danger btn-sm"
+           href="/secrets/@Uri.EscapeDataString(_selectedTenant ?? "")">
+            View all secrets
+        </a>
+        <a class="btn btn-outline-secondary btn-sm"
+           href="/history/@Uri.EscapeDataString(_selectedTenant ?? "")">
+            Scan history
+        </a>
     </div>
+
+    @if (_apps.Any(a => a.RiskLevel is "Critical" or "High"))
+    {
+        <h3 class="mt-4" style="font-size:1rem;font-weight:600">Urgent attention</h3>
+        <table class="aarm-table">
+            <thead>
+                <tr><th>Risk</th><th>App</th><th>Expired</th><th>Expiring ≤30d</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var a in _apps.Where(a => a.RiskLevel is "Critical" or "High")
+                                        .OrderByDescending(a => a.ExpiredSecretCount)
+                                        .Take(10))
+                {
+                    <tr>
+                        <td><span class="badge-risk @a.RiskLevel.ToLower()">@a.RiskLevel</span></td>
+                        <td>@a.DisplayName</td>
+                        <td class="@(a.ExpiredSecretCount > 0 ? "risk-critical" : "")">@a.ExpiredSecretCount</td>
+                        <td class="@(a.ExpiringSecretCount > 0 ? "risk-high" : "")">@a.ExpiringSecretCount</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 }
 
 @code {
     private IReadOnlyList<TenantProfile> _tenants = Array.Empty<TenantProfile>();
-    private string? _selectedTenant;
+    private string _selectedTenant = "";
     private bool _loading;
     private string? _error;
-    private IReadOnlyList<AppRegistrationSummary>? _apps;
-    private int _appsExpiring30;
-    private int _appsExpiring90;
-    private int _withoutOwner;
+    private List<AppRegistrationSummary>? _apps;
+    private bool _fromCache;
+
+    private int _expiring30;
+    private int _expiring90;
+    private int _highRiskApps;
 
     protected override async Task OnInitializedAsync()
-        => _tenants = await TenantRepo.ListTenantsAsync();
+    {
+        _tenants = await TenantRepo.ListTenantsAsync();
 
-    private void OnTenantChanged(ChangeEventArgs e)
-        => _selectedTenant = e.Value?.ToString();
+        // Auto-select: prefer last scanned, fall back to default, then first tenant
+        _selectedTenant =
+            SettingsSvc.Settings.LastScannedTenant ??
+            SettingsSvc.Settings.DefaultTenant ??
+            (_tenants.Count > 0 ? _tenants[0].DisplayName : "");
 
-    private async Task LoadDashboardAsync()
+        // Auto-load from history cache if available
+        if (!string.IsNullOrEmpty(_selectedTenant))
+            await TryLoadFromCacheAsync();
+    }
+
+    private async Task TryLoadFromCacheAsync()
+    {
+        var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
+        if (tenant is null) return;
+
+        var history = await HistoryRepo.GetHistoryAsync(
+            tenant.TenantId, tenant.DefaultEnvironmentName ?? "default", maxEntries: 1);
+
+        if (history.Count > 0)
+        {
+            _apps = history[0].Apps.ToList();
+            _fromCache = true;
+            ComputeStats();
+        }
+    }
+
+    private async Task ScanAsync()
     {
         if (string.IsNullOrEmpty(_selectedTenant)) return;
         _loading = true;
         _error = null;
-        _apps = null;
-
+        _fromCache = false;
         try
         {
             var envelope = await Cli.RunAsync<IReadOnlyList<AppRegistrationSummary>>(
                 _selectedTenant, "apps", "list");
+            _apps = envelope?.Data?.ToList() ?? new();
+            ComputeStats();
 
-            _apps = envelope?.Data ?? Array.Empty<AppRegistrationSummary>();
+            // Persist to history and update last-scanned setting
+            var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
+            if (tenant is not null)
+                await HistoryRepo.SaveScanAsync(tenant.TenantId, tenant.DefaultEnvironmentName ?? "default", _apps);
 
-            var allSecrets = _apps.SelectMany(a => a.Secrets).ToList();
-            _appsExpiring30 = allSecrets.Count(s => s.DaysUntilExpiry is >= 0 and <= 30);
-            _appsExpiring90 = allSecrets.Count(s => s.DaysUntilExpiry is >= 0 and <= 90);
-            _withoutOwner = 0; // owners require Directory.Read.All; surfaced in preflight
+            await SettingsSvc.RecordScanAsync(_selectedTenant);
         }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _loading = false;
-        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _loading = false; }
     }
+
+    private void ComputeStats()
+    {
+        if (_apps is null) return;
+        var all = _apps.SelectMany(a => a.Secrets).ToList();
+        _expiring30   = all.Count(s => s.DaysUntilExpiry is >= 0 and <= 30);
+        _expiring90   = all.Count(s => s.DaysUntilExpiry is >= 0 and <= 90);
+        _highRiskApps = _apps.Count(a => a.RiskLevel is "Critical" or "High");
+    }
+
+    private void OnTenantChanged(ChangeEventArgs e) =>
+        _selectedTenant = e.Value?.ToString() ?? "";
 }

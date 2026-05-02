@@ -80,15 +80,16 @@ html, body {
     border-left: 3px solid transparent;
 }
 
-.aarm-nav li a:hover,
-.aarm-nav li a.active {
-    background: var(--bg-card);
-    color: var(--text);
+.aarm-nav li a:hover {
+    background: #3a3c52;
+    color: #ffffff;
 }
 
 .aarm-nav li a.active {
+    background: #3a3c52;
     color: var(--accent);
     border-left-color: var(--accent);
+    font-weight: 600;
 }
 
 .aarm-main {
@@ -173,7 +174,8 @@ html, body {
 }
 
 .aarm-table tr:hover td {
-    background: rgba(255,255,255,0.03);
+    background: rgba(203,166,247,0.12);
+    color: #ffffff;
 }
 
 .aarm-table code {
@@ -263,6 +265,45 @@ html, body {
     border-radius: 20px;
     font-size: 0.8rem;
     font-weight: 600;
+}
+
+/* ── Settings page ────────────────────────────────────────────────────────── */
+
+.settings-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.settings-section h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 1rem 0;
+    padding-bottom: .5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-row {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    margin-bottom: 1rem;
+}
+
+.settings-row label {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.settings-row small {
+    font-size: .75rem;
+    color: var(--text-dim);
 }
 
 .aarm-status-badge.ok   { background: rgba(166,227,161,0.15); color: var(--status-ok); }

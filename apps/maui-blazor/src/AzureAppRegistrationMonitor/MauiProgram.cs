@@ -11,11 +11,11 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
 
         builder
-            .UseMauiApp<App>()          // correct MAUI entry point
-            // .UseNotifyIcon()         // H.NotifyIcon.Maui — re-enable once base app builds (OQ-043)
+            .UseMauiApp<App>()
+            // .UseNotifyIcon()  — re-enable once H.NotifyIcon.Maui API is verified (OQ-043)
             .ConfigureFonts(fonts =>
             {
-                // Add custom fonts here once .ttf files are placed in Resources/Fonts/
+                // Add custom fonts once .ttf files are placed in Resources/Fonts/
             });
 
         builder.Services.AddMauiBlazorWebView();
@@ -29,9 +29,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<CliExecutionService>();
         builder.Services.AddSingleton<TenantConfigRepository>();
         builder.Services.AddSingleton<HistoryRepository>();
+        builder.Services.AddSingleton<SettingsService>();
         builder.Services.AddSingleton<SystemTrayService>();
 
-        // View models (transient — one per page lifetime)
+        // View models
         builder.Services.AddTransient<TenantOverviewViewModel>();
         builder.Services.AddTransient<PreflightViewModel>();
         builder.Services.AddTransient<DashboardViewModel>();

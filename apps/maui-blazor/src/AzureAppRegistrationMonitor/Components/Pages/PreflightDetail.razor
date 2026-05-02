@@ -1,56 +1,79 @@
 @page "/preflight"
 @page "/preflight/{TenantName}"
 @inject CliExecutionService Cli
+@inject TenantConfigRepository TenantRepo
 
 <PageTitle>Preflight — AARM</PageTitle>
 
 <div class="aarm-page-header">
     <h1>Preflight Check</h1>
-    @if (!string.IsNullOrEmpty(TenantName))
-    {
-        <span class="text-muted">@TenantName</span>
-    }
+
+    <select class="form-select" style="max-width:220px" @bind="_selectedTenant">
+        <option value="">— Select tenant —</option>
+        @foreach (var t in _tenants)
+        {
+            <option value="@t.DisplayName">@t.DisplayName</option>
+        }
+    </select>
+
+    <button class="btn btn-primary btn-sm"
+            @onclick="RunPreflightAsync"
+            disabled="@(string.IsNullOrEmpty(_selectedTenant) || _loading)">
+        @(_loading ? "Running…" : "Run preflight")
+    </button>
 </div>
 
 @if (_loading)
 {
-    <div class="aarm-loading">Running preflight checks…</div>
+    <div class="aarm-loading">Running capability checks…</div>
 }
 else if (_error is not null)
 {
-    <div class="alert alert-danger">@_error</div>
+    <div class="aarm-error">@_error</div>
 }
 else if (_result is null)
 {
     <div class="aarm-empty">
-        <p>Select a tenant from the <a href="/">Tenants</a> page and click Preflight.</p>
+        Select a tenant and click <strong>Run preflight</strong> to check which permissions are available.
+        <br /><br />
+        Preflight tests each capability individually against the real Entra API
+        and reports exactly which permissions are missing.
     </div>
 }
 else
 {
     <div class="aarm-preflight-header">
-        <div class="aarm-status-badge @(_result.AuthValid ? "ok" : "fail")">Auth @(_result.AuthValid ? "OK" : "FAILED")</div>
-        <div class="aarm-status-badge @(_result.GraphReachable ? "ok" : "fail")">Graph @(_result.GraphReachable ? "OK" : "FAILED")</div>
-        <small class="text-muted">Checked @_result.CheckedAt</small>
+        <div class="aarm-status-badge @(_result.AuthValid ? "ok" : "fail")">
+            Auth @(_result.AuthValid ? "OK" : "FAILED")
+        </div>
+        <div class="aarm-status-badge @(_result.GraphReachable ? "ok" : "fail")">
+            Graph @(_result.GraphReachable ? "reachable" : "unreachable")
+        </div>
+        <small style="color:var(--text-muted)">
+            Checked @(DateTimeOffset.TryParse(_result.CheckedAt, out var dt)
+                ? dt.LocalDateTime.ToString("HH:mm:ss")
+                : _result.CheckedAt)
+        </small>
     </div>
 
-    <h3>Capabilities</h3>
-    <table class="table aarm-capabilities-table">
+    <h3 style="font-size:.95rem;font-weight:600;margin-top:1.25rem;margin-bottom:.5rem">
+        Capabilities (@GetEnabledCount() / @TotalCapabilities enabled)
+    </h3>
+    <table class="aarm-capabilities-table">
         <tbody>
-            @foreach (var cap in GetCapabilities(_result.Capabilities))
+            @foreach (var cap in GetCapabilities())
             {
                 <tr>
-                    <td>
-                        <span class="@(cap.Value ? "cap-ok" : "cap-fail")">
-                            @(cap.Value ? "✓" : "✗")
+                    <td style="width:24px;padding:.3rem .5rem">
+                        <span class="@(cap.Value ? "cap-ok" : "cap-fail")" style="font-size:1rem">
+                            @(cap.Value ? "✓" : "○")
                         </span>
                     </td>
-                    <td><code>@cap.Key</code></td>
-                    <td>
-                        @if (!cap.Value)
-                        {
-                            <span class="text-muted">Unavailable</span>
-                        }
+                    <td style="padding:.3rem .5rem;font-family:monospace;font-size:.82rem;color:var(--text)">
+                        @cap.Key
+                    </td>
+                    <td style="padding:.3rem .5rem;font-size:.78rem;color:var(--text-muted)">
+                        @(cap.Value ? "" : "unavailable")
                     </td>
                 </tr>
             }
@@ -59,72 +82,87 @@ else
 
     @if (_result.MissingPermissions.Any())
     {
-        <h3>Missing Permissions</h3>
-        <ul class="aarm-missing-permissions">
+        <h3 style="font-size:.95rem;font-weight:600;margin-top:1.25rem;margin-bottom:.5rem">
+            Missing permissions
+        </h3>
+        <ul style="list-style:none;padding:0;margin:0">
             @foreach (var p in _result.MissingPermissions)
             {
-                <li><code>@p</code></li>
+                <li style="padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.8rem;color:var(--risk-high)">
+                    ✗ @p
+                </li>
             }
         </ul>
+        <p style="margin-top:.75rem;font-size:.8rem;color:var(--text-muted)">
+            Run <code>aarm --tenant "@_selectedTenant" preflight explain</code> for detailed grant instructions.
+        </p>
     }
 
     @if (_result.Warnings.Any())
     {
-        <h3>Warnings</h3>
-        <ul class="aarm-warnings">
-            @foreach (var w in _result.Warnings)
-            {
-                <li>@w</li>
-            }
-        </ul>
+        <h3 style="font-size:.95rem;font-weight:600;margin-top:1.25rem;margin-bottom:.5rem">Warnings</h3>
+        @foreach (var w in _result.Warnings)
+        {
+            <p style="font-size:.82rem;color:var(--risk-medium);margin:.2rem 0">⚠ @w</p>
+        }
     }
 }
 
 @code {
     [Parameter] public string? TenantName { get; set; }
 
+    private IReadOnlyList<TenantProfile> _tenants = Array.Empty<TenantProfile>();
+    private string _selectedTenant = "";
     private bool _loading;
     private string? _error;
     private PreflightResult? _result;
 
-    protected override async Task OnParametersSetAsync()
+    private static int TotalCapabilities => 12;
+    private int GetEnabledCount() => _result is null ? 0 : GetCapabilities().Count(c => c.Value);
+
+    protected override async Task OnInitializedAsync()
     {
+        _tenants = await TenantRepo.ListTenantsAsync();
         if (!string.IsNullOrEmpty(TenantName))
+        {
+            _selectedTenant = TenantName;
             await RunPreflightAsync();
+        }
+        else if (_tenants.Count > 0)
+        {
+            _selectedTenant = _tenants[0].DisplayName;
+        }
     }
 
     private async Task RunPreflightAsync()
     {
+        if (string.IsNullOrEmpty(_selectedTenant)) return;
         _loading = true;
         _error = null;
         try
         {
-            var envelope = await Cli.RunAsync<PreflightResult>(TenantName!, "preflight", "run");
+            var envelope = await Cli.RunAsync<PreflightResult>(_selectedTenant, "preflight", "run");
             _result = envelope?.Data;
         }
-        catch (Exception ex)
-        {
-            _error = ex.Message;
-        }
-        finally
-        {
-            _loading = false;
-        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _loading = false; }
     }
 
-    private static IEnumerable<KeyValuePair<string, bool>> GetCapabilities(CapabilitySet c)
+    private IEnumerable<KeyValuePair<string, bool>> GetCapabilities()
     {
-        yield return new("canReadApplications", c.CanReadApplications);
-        yield return new("canReadApplicationSecrets", c.CanReadApplicationSecrets);
-        yield return new("canReadServicePrincipals", c.CanReadServicePrincipals);
-        yield return new("canReadOwners", c.CanReadOwners);
-        yield return new("canReadDirectory", c.CanReadDirectory);
-        yield return new("canQueryLogAnalytics", c.CanQueryLogAnalytics);
+        if (_result is null) yield break;
+        var c = _result.Capabilities;
+        yield return new("canReadApplications",             c.CanReadApplications);
+        yield return new("canReadApplicationSecrets",       c.CanReadApplicationSecrets);
+        yield return new("canReadServicePrincipals",        c.CanReadServicePrincipals);
+        yield return new("canReadOwners",                   c.CanReadOwners);
+        yield return new("canReadDirectory",                c.CanReadDirectory);
+        yield return new("canQueryLogAnalytics",            c.CanQueryLogAnalytics);
         yield return new("canAnalyzeServicePrincipalSignIns", c.CanAnalyzeServicePrincipalSignIns);
-        yield return new("canCreateApplicationSecrets", c.CanCreateApplicationSecrets);
-        yield return new("canDeleteApplicationSecrets", c.CanDeleteApplicationSecrets);
-        yield return new("canCreateApplications", c.CanCreateApplications);
-        yield return new("canReadAzureResources", c.CanReadAzureResources);
-        yield return new("canReadKeyVaultMetadata", c.CanReadKeyVaultMetadata);
+        yield return new("canCreateApplicationSecrets",     c.CanCreateApplicationSecrets);
+        yield return new("canDeleteApplicationSecrets",     c.CanDeleteApplicationSecrets);
+        yield return new("canCreateApplications",           c.CanCreateApplications);
+        yield return new("canReadAzureResources",           c.CanReadAzureResources);
+        yield return new("canReadKeyVaultMetadata",         c.CanReadKeyVaultMetadata);
     }
 }
