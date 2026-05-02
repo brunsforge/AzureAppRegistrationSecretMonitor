@@ -1,0 +1,22 @@
+{
+  "name": "aarm-live-tests",
+  "private": true,
+  "type": "module",
+  "description": "Live integration tests for @brunsforge/azure-app-registration-monitor against a real Entra tenant",
+  "scripts": {
+    "test":         "vitest run --reporter=verbose",
+    "test:watch":   "vitest --reporter=verbose",
+    "test:auth":    "vitest run --reporter=verbose src/01-auth.test.ts",
+    "test:graph":   "vitest run --reporter=verbose src/02-graph.test.ts",
+    "test:inventory": "vitest run --reporter=verbose src/03-inventory.test.ts",
+    "test:preflight": "vitest run --reporter=verbose src/04-preflight.test.ts",
+    "test:envelope":  "vitest run --reporter=verbose src/05-envelope.test.ts"
+  },
+  "dependencies": {
+    "@brunsforge/azure-app-registration-monitor": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "vitest": "^2.0.0"
+  }
+}
