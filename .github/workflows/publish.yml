@@ -1,10 +1,13 @@
 name: Publish to npm
 
-# Triggered by pushing a version tag: git tag v0.1.0 && git push --tags
+# Triggered by pushing a version tag: git tag v0.1.1 && git push --tags
 on:
   push:
     tags:
       - 'v*'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   publish:
@@ -16,7 +19,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
+          # registry-url injects NODE_AUTH_TOKEN into .npmrc automatically
           registry-url: https://registry.npmjs.org
           cache: npm
 
@@ -34,6 +38,13 @@ jobs:
 
       - name: Unit tests
         run: npm test --workspace packages/core
+
+      # Dry-run first to catch errors before touching the registry
+      - name: Dry-run — core
+        run: npm publish --workspace packages/core --dry-run
+
+      - name: Dry-run — CLI
+        run: npm publish --workspace packages/cli --dry-run
 
       # Publish core first — CLI depends on it
       - name: Publish @brunsforge/azure-app-registration-monitor (public)
