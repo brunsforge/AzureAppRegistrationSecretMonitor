@@ -1,0 +1,111 @@
+@page "/history"
+@page "/history/{TenantName}"
+@inject HistoryRepository HistoryRepo
+@inject TenantConfigRepository TenantRepo
+
+<PageTitle>History — AARM</PageTitle>
+
+<div class="aarm-page-header">
+    <h1>Scan History</h1>
+
+    <select class="form-select" style="max-width:220px" @bind="_selectedTenant">
+        <option value="">— Select tenant —</option>
+        @foreach (var t in _tenants)
+        {
+            <option value="@t.DisplayName">@t.DisplayName</option>
+        }
+    </select>
+
+    <button class="btn btn-outline-primary btn-sm"
+            @onclick="LoadAsync"
+            disabled="@string.IsNullOrEmpty(_selectedTenant)">
+        Refresh
+    </button>
+</div>
+
+@if (_loading)
+{
+    <div class="aarm-loading">Loading history…</div>
+}
+else if (_error is not null)
+{
+    <div class="aarm-error">@_error</div>
+}
+else if (_history is null || _history.Count == 0)
+{
+    <div class="aarm-empty">
+        <p>No scan history yet for this tenant.</p>
+        <p>Run a scan from the <a href="/dashboard">Dashboard</a> to start building history.</p>
+    </div>
+}
+else
+{
+    <table class="aarm-table">
+        <thead>
+            <tr>
+                <th>Scanned</th>
+                <th>Apps</th>
+                <th>Secrets</th>
+                <th>Expired</th>
+                <th>Expiring ≤30d</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var entry in _history)
+            {
+                var hasExpired  = entry.ExpiredCount  > 0;
+                var hasExpiring = entry.ExpiringCount > 0;
+                <tr>
+                    <td>
+                        @if (DateTimeOffset.TryParse(entry.ScannedAt, out var dt))
+                        {
+                            @dt.LocalDateTime.ToString("yyyy-MM-dd  HH:mm")
+                        }
+                        else { @entry.ScannedAt }
+                    </td>
+                    <td>@entry.AppCount</td>
+                    <td>@entry.SecretCount</td>
+                    <td class="@(hasExpired ? "risk-critical" : "")">@entry.ExpiredCount</td>
+                    <td class="@(hasExpiring ? "risk-high" : "")">@entry.ExpiringCount</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] public string? TenantName { get; set; }
+
+    private IReadOnlyList<TenantProfile> _tenants = Array.Empty<TenantProfile>();
+    private string _selectedTenant = "";
+    private bool _loading;
+    private string? _error;
+    private List<ScanHistoryEntry>? _history;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tenants = await TenantRepo.ListTenantsAsync();
+        if (!string.IsNullOrEmpty(TenantName))
+        {
+            _selectedTenant = TenantName;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (string.IsNullOrEmpty(_selectedTenant)) return;
+        _loading = true;
+        _error = null;
+        try
+        {
+            var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
+            if (tenant is null) { _error = $"Tenant \"{_selectedTenant}\" not found."; return; }
+            var entries = await HistoryRepo.GetHistoryAsync(
+                tenant.TenantId, tenant.DefaultEnvironmentName ?? "default");
+            _history = entries.ToList();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+}

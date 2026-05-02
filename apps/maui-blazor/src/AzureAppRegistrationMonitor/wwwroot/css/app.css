@@ -1,0 +1,314 @@
+/* ── AARM — Azure App Registration Monitor ─────────────────────────────────── */
+
+:root {
+    --bg:          #1e1e2e;
+    --bg-sidebar:  #181825;
+    --bg-card:     #313244;
+    --bg-hover:    #45475a;
+    --text:        #cdd6f4;
+    --text-muted:  #a6adc8;
+    --text-dim:    #6c7086;
+    --accent:      #cba6f7;
+    --accent-blue: #89b4fa;
+    --border:      #45475a;
+
+    --risk-critical: #f38ba8;
+    --risk-high:     #fab387;
+    --risk-medium:   #f9e2af;
+    --risk-low:      #89dceb;
+    --risk-info:     #6c7086;
+    --status-ok:     #a6e3a1;
+}
+
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+}
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+
+.aarm-layout {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.aarm-sidebar {
+    width: 220px;
+    min-width: 220px;
+    background: var(--bg-sidebar);
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+}
+
+.aarm-sidebar-brand {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+}
+
+.aarm-brand-icon { font-size: 1.2rem; }
+
+.aarm-nav {
+    list-style: none;
+    padding: 0.5rem 0;
+    margin: 0;
+    flex: 1;
+}
+
+.aarm-nav li a {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.6rem 1.25rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: background 0.12s, color 0.12s;
+    border-left: 3px solid transparent;
+}
+
+.aarm-nav li a:hover,
+.aarm-nav li a.active {
+    background: var(--bg-card);
+    color: var(--text);
+}
+
+.aarm-nav li a.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+}
+
+.aarm-main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    background: var(--bg);
+}
+
+/* ── Page sections ────────────────────────────────────────────────────────── */
+
+.aarm-page-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.aarm-page-header h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+}
+
+.aarm-loading {
+    color: var(--text-muted);
+    padding: 2rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.aarm-empty {
+    color: var(--text-muted);
+    padding: 3rem 0;
+    text-align: center;
+}
+
+.aarm-empty code {
+    background: var(--bg-card);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--accent);
+}
+
+.aarm-error {
+    background: #3d1a1a;
+    border: 1px solid var(--risk-critical);
+    border-radius: 6px;
+    padding: 1rem;
+    color: var(--risk-critical);
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────────── */
+
+.aarm-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.aarm-table th {
+    background: var(--bg-card);
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.aarm-table td {
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+}
+
+.aarm-table tr:hover td {
+    background: rgba(255,255,255,0.03);
+}
+
+.aarm-table code {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    background: var(--bg-card);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+}
+
+/* ── Risk badges ──────────────────────────────────────────────────────────── */
+
+.risk-critical { color: var(--risk-critical); font-weight: 700; }
+.risk-high     { color: var(--risk-high); }
+.risk-medium   { color: var(--risk-medium); }
+.risk-low      { color: var(--risk-low); }
+.risk-info     { color: var(--risk-info); }
+
+.badge-risk {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.badge-risk.critical { background: rgba(243,139,168,0.15); color: var(--risk-critical); }
+.badge-risk.high     { background: rgba(250,179,135,0.15); color: var(--risk-high); }
+.badge-risk.medium   { background: rgba(249,226,175,0.15); color: var(--risk-medium); }
+.badge-risk.low      { background: rgba(137,220,235,0.15); color: var(--risk-low); }
+.badge-risk.info     { background: rgba(108,112,134,0.15); color: var(--text-muted); }
+
+.status-ok   { color: var(--status-ok); }
+.status-fail { color: var(--risk-critical); }
+
+/* ── Dashboard cards ──────────────────────────────────────────────────────── */
+
+.aarm-dashboard-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.aarm-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    text-align: center;
+}
+
+.aarm-card-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 0.4rem;
+}
+
+.aarm-card-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.aarm-card.aarm-card-critical .aarm-card-value { color: var(--risk-critical); }
+.aarm-card.aarm-card-high     .aarm-card-value { color: var(--risk-high); }
+.aarm-card.aarm-card-medium   .aarm-card-value { color: var(--risk-medium); }
+.aarm-card.aarm-card-info     .aarm-card-value { color: var(--text-muted); }
+
+/* ── Preflight ────────────────────────────────────────────────────────────── */
+
+.aarm-preflight-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.aarm-status-badge {
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.aarm-status-badge.ok   { background: rgba(166,227,161,0.15); color: var(--status-ok); }
+.aarm-status-badge.fail { background: rgba(243,139,168,0.15); color: var(--risk-critical); }
+
+.aarm-capabilities-table { width: 100%; border-collapse: collapse; }
+.aarm-capabilities-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); }
+
+.cap-ok   { color: var(--status-ok); }
+.cap-fail { color: var(--text-dim); }
+
+/* ── Bootstrap overrides for dark theme ──────────────────────────────────── */
+
+.btn-primary    { background: #7c3aed; border-color: #7c3aed; }
+.btn-primary:hover { background: #6d28d9; border-color: #6d28d9; }
+.btn-outline-primary { color: var(--accent); border-color: var(--accent); }
+.btn-outline-primary:hover { background: rgba(203,166,247,0.15); color: var(--accent); border-color: var(--accent); }
+.btn-outline-secondary { color: var(--text-muted); border-color: var(--border); }
+.btn-outline-secondary:hover { background: var(--bg-card); color: var(--text); }
+.btn-outline-danger { color: var(--risk-critical); border-color: var(--risk-critical); }
+
+.form-select {
+    background-color: var(--bg-card);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+.badge.bg-success { background-color: rgba(166,227,161,0.2) !important; color: var(--status-ok); }
+.badge.bg-danger  { background-color: rgba(243,139,168,0.2) !important; color: var(--risk-critical); }
+.badge.bg-warning { background-color: rgba(249,226,175,0.2) !important; color: var(--risk-medium); color: #000; }
+.badge.bg-secondary { background-color: var(--bg-card) !important; color: var(--text-muted); }
+
+/* ── Blazor error UI ──────────────────────────────────────────────────────── */
+
+#blazor-error-ui {
+    background: #3d1a1a;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+    color: var(--risk-critical);
+    font-size: 0.875rem;
+}
+
+#blazor-error-ui .dismiss { cursor: pointer; float: right; font-weight: 700; }
