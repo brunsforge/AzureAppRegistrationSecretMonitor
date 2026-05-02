@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Azure App Registration Monitor CLI — aarm binary for monitoring Entra client secrets",
   "license": "MIT",
+  "private": true,
   "type": "module",
   "bin": {
     "aarm": "./dist/index.js"
@@ -14,27 +15,11 @@
   "engines": {
     "node": ">=18"
   },
-  "publishConfig": {
-    "access": "restricted"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/brunsforge/AzureAppRegistrationSecretMonitor.git",
     "directory": "packages/cli"
   },
-  "homepage": "https://github.com/brunsforge/AzureAppRegistrationSecretMonitor#readme",
-  "bugs": {
-    "url": "https://github.com/brunsforge/AzureAppRegistrationSecretMonitor/issues"
-  },
-  "keywords": [
-    "aarm",
-    "azure",
-    "cli",
-    "app-registration",
-    "microsoft-entra",
-    "client-secret",
-    "monitoring"
-  ],
   "scripts": {
     "build": "tsc",
     "dev": "node --import tsx/esm src/index.ts"

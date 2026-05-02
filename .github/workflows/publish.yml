@@ -1,6 +1,6 @@
 name: Publish to npm
 
-# Triggered by pushing a version tag: git tag v0.1.0 && git push --tags
+# Triggered by pushing a version tag: git tag v0.1.x && git push --tags
 on:
   push:
     tags:
@@ -11,7 +11,7 @@ env:
 
 jobs:
   publish:
-    name: Publish packages
+    name: Publish core package
     runs-on: ubuntu-latest
 
     steps:
@@ -29,35 +29,19 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      # Fix npm auto-correct noise by running pkg fix before anything else
       - name: Fix package.json normalisation
-        run: |
-          npm pkg fix --workspace packages/core
-          npm pkg fix --workspace packages/cli
+        run: npm pkg fix --workspace packages/core
 
       - name: Build core
         run: npm run build --workspace packages/core
 
-      - name: Build CLI
-        run: npm run build --workspace packages/cli
-
       - name: Unit tests
         run: npm test --workspace packages/core
 
-      # Dry-run to validate tarball contents without touching the registry
-      - name: Dry-run — core
+      - name: Dry-run
         run: npm publish --workspace packages/core --dry-run
 
-      - name: Dry-run — CLI
-        run: npm publish --workspace packages/cli --dry-run
-
-      # Publish core first — CLI depends on it at ^0.1.0
       - name: Publish @brunsforge/azure-app-registration-monitor (public)
         run: npm publish --workspace packages/core
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish @brunsforge/aarm (restricted)
-        run: npm publish --workspace packages/cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
