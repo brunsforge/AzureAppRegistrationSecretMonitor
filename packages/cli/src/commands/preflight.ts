@@ -78,9 +78,10 @@ export function registerPreflightCommand(program: Command): void {
       try {
         const ctx = await buildContext(program.opts());
 
-        process.stdout.write(
-          chalk.dim(`Running preflight for ${ctx.tenantId}...\n`),
-        );
+        // Progress goes to stderr so stdout stays clean JSON when --output json
+        if (!ctx.isJson) {
+          process.stderr.write(chalk.dim(`Running preflight for ${ctx.tenantId}...\n`));
+        }
 
         const result = await ctx.preflightService.run({
           tenantId: ctx.tenantId,
@@ -110,7 +111,8 @@ export function registerPreflightCommand(program: Command): void {
     .command('show')
     .description('Show the last cached preflight result')
     .action(() => {
-      process.stdout.write(
+      // Use stderr so this message doesn't corrupt --output json consumers
+      process.stderr.write(
         chalk.dim(
           'Cached preflight results will be available once local history storage (Phase 5) is implemented.\n' +
             'Run "aarm preflight run" to perform a live check.\n',

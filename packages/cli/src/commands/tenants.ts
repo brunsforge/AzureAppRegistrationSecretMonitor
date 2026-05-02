@@ -208,9 +208,8 @@ export function registerTenantsCommand(program: Command): void {
         const globalOpts = tenants.parent!.opts<GlobalOptions>();
         const ctx = await buildContext(globalOpts);
 
-        process.stdout.write(
-          chalk.dim(`Validating tenant ${ctx.tenantId}...\n`),
-        );
+        // Progress to stderr only — stdout must remain clean for JSON consumers
+        process.stderr.write(chalk.dim(`Validating tenant ${ctx.tenantId}...\n`));
 
         const result = await ctx.preflightService.run({
           tenantId: ctx.tenantId,
