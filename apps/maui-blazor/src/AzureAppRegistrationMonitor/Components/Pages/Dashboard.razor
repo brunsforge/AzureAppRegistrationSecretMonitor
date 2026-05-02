@@ -1,0 +1,111 @@
+@page "/dashboard"
+@inject CliExecutionService Cli
+@inject TenantConfigRepository TenantRepo
+
+<PageTitle>Dashboard — AARM</PageTitle>
+
+<div class="aarm-page-header">
+    <h1>Dashboard</h1>
+    <select class="form-select aarm-tenant-selector" @onchange="OnTenantChanged">
+        <option value="">— Select tenant —</option>
+        @foreach (var t in _tenants)
+        {
+            <option value="@t.DisplayName">@t.DisplayName</option>
+        }
+    </select>
+    <button class="btn btn-primary" @onclick="LoadDashboardAsync" disabled="@(string.IsNullOrEmpty(_selectedTenant) || _loading)">
+        Scan
+    </button>
+</div>
+
+@if (_loading)
+{
+    <div class="aarm-loading">Scanning secrets…</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_apps is null)
+{
+    <div class="aarm-empty">Select a tenant and click Scan to load the dashboard.</div>
+}
+else
+{
+    <div class="aarm-dashboard-cards">
+        <div class="aarm-card">
+            <div class="aarm-card-value">@_apps.Count</div>
+            <div class="aarm-card-label">App Registrations</div>
+        </div>
+        <div class="aarm-card">
+            <div class="aarm-card-value">@_apps.Sum(a => a.SecretCount)</div>
+            <div class="aarm-card-label">Secrets</div>
+        </div>
+        <div class="aarm-card aarm-card-critical">
+            <div class="aarm-card-value">@_apps.Sum(a => a.ExpiredSecretCount)</div>
+            <div class="aarm-card-label">Expired</div>
+        </div>
+        <div class="aarm-card aarm-card-high">
+            <div class="aarm-card-value">@_appsExpiring30</div>
+            <div class="aarm-card-label">Expiring in 30 days</div>
+        </div>
+        <div class="aarm-card aarm-card-medium">
+            <div class="aarm-card-value">@_appsExpiring90</div>
+            <div class="aarm-card-label">Expiring in 90 days</div>
+        </div>
+        <div class="aarm-card aarm-card-info">
+            <div class="aarm-card-value">@_withoutOwner</div>
+            <div class="aarm-card-label">Without Owner</div>
+        </div>
+    </div>
+
+    <div class="aarm-dashboard-actions mt-3">
+        <a class="btn btn-outline-danger" href="/secrets/@Uri.EscapeDataString(_selectedTenant ?? "")">View Secrets</a>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<TenantProfile> _tenants = Array.Empty<TenantProfile>();
+    private string? _selectedTenant;
+    private bool _loading;
+    private string? _error;
+    private IReadOnlyList<AppRegistrationSummary>? _apps;
+    private int _appsExpiring30;
+    private int _appsExpiring90;
+    private int _withoutOwner;
+
+    protected override async Task OnInitializedAsync()
+        => _tenants = await TenantRepo.ListTenantsAsync();
+
+    private void OnTenantChanged(ChangeEventArgs e)
+        => _selectedTenant = e.Value?.ToString();
+
+    private async Task LoadDashboardAsync()
+    {
+        if (string.IsNullOrEmpty(_selectedTenant)) return;
+        _loading = true;
+        _error = null;
+        _apps = null;
+
+        try
+        {
+            var envelope = await Cli.RunAsync<IReadOnlyList<AppRegistrationSummary>>(
+                _selectedTenant, "apps", "list");
+
+            _apps = envelope?.Data ?? Array.Empty<AppRegistrationSummary>();
+
+            var allSecrets = _apps.SelectMany(a => a.Secrets).ToList();
+            _appsExpiring30 = allSecrets.Count(s => s.DaysUntilExpiry is >= 0 and <= 30);
+            _appsExpiring90 = allSecrets.Count(s => s.DaysUntilExpiry is >= 0 and <= 90);
+            _withoutOwner = 0; // owners require Directory.Read.All; surfaced in preflight
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

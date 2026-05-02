@@ -1,0 +1,16 @@
+{
+  "name": "azure-app-registration-monitor",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build":       "npm run build --workspace packages/core && npm run build --workspace packages/cli",
+    "test":        "npm test --workspace packages/core",
+    "core-check":  "node scripts/core-check.mjs",
+    "integration": "node scripts/integration-check.mjs"
+  }
+}

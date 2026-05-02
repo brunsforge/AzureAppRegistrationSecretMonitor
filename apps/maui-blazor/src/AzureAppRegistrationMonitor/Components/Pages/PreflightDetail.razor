@@ -1,0 +1,130 @@
+@page "/preflight"
+@page "/preflight/{TenantName}"
+@inject CliExecutionService Cli
+
+<PageTitle>Preflight — AARM</PageTitle>
+
+<div class="aarm-page-header">
+    <h1>Preflight Check</h1>
+    @if (!string.IsNullOrEmpty(TenantName))
+    {
+        <span class="text-muted">@TenantName</span>
+    }
+</div>
+
+@if (_loading)
+{
+    <div class="aarm-loading">Running preflight checks…</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_result is null)
+{
+    <div class="aarm-empty">
+        <p>Select a tenant from the <a href="/">Tenants</a> page and click Preflight.</p>
+    </div>
+}
+else
+{
+    <div class="aarm-preflight-header">
+        <div class="aarm-status-badge @(_result.AuthValid ? "ok" : "fail")">Auth @(_result.AuthValid ? "OK" : "FAILED")</div>
+        <div class="aarm-status-badge @(_result.GraphReachable ? "ok" : "fail")">Graph @(_result.GraphReachable ? "OK" : "FAILED")</div>
+        <small class="text-muted">Checked @_result.CheckedAt</small>
+    </div>
+
+    <h3>Capabilities</h3>
+    <table class="table aarm-capabilities-table">
+        <tbody>
+            @foreach (var cap in GetCapabilities(_result.Capabilities))
+            {
+                <tr>
+                    <td>
+                        <span class="@(cap.Value ? "cap-ok" : "cap-fail")">
+                            @(cap.Value ? "✓" : "✗")
+                        </span>
+                    </td>
+                    <td><code>@cap.Key</code></td>
+                    <td>
+                        @if (!cap.Value)
+                        {
+                            <span class="text-muted">Unavailable</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (_result.MissingPermissions.Any())
+    {
+        <h3>Missing Permissions</h3>
+        <ul class="aarm-missing-permissions">
+            @foreach (var p in _result.MissingPermissions)
+            {
+                <li><code>@p</code></li>
+            }
+        </ul>
+    }
+
+    @if (_result.Warnings.Any())
+    {
+        <h3>Warnings</h3>
+        <ul class="aarm-warnings">
+            @foreach (var w in _result.Warnings)
+            {
+                <li>@w</li>
+            }
+        </ul>
+    }
+}
+
+@code {
+    [Parameter] public string? TenantName { get; set; }
+
+    private bool _loading;
+    private string? _error;
+    private PreflightResult? _result;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(TenantName))
+            await RunPreflightAsync();
+    }
+
+    private async Task RunPreflightAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var envelope = await Cli.RunAsync<PreflightResult>(TenantName!, "preflight", "run");
+            _result = envelope?.Data;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static IEnumerable<KeyValuePair<string, bool>> GetCapabilities(CapabilitySet c)
+    {
+        yield return new("canReadApplications", c.CanReadApplications);
+        yield return new("canReadApplicationSecrets", c.CanReadApplicationSecrets);
+        yield return new("canReadServicePrincipals", c.CanReadServicePrincipals);
+        yield return new("canReadOwners", c.CanReadOwners);
+        yield return new("canReadDirectory", c.CanReadDirectory);
+        yield return new("canQueryLogAnalytics", c.CanQueryLogAnalytics);
+        yield return new("canAnalyzeServicePrincipalSignIns", c.CanAnalyzeServicePrincipalSignIns);
+        yield return new("canCreateApplicationSecrets", c.CanCreateApplicationSecrets);
+        yield return new("canDeleteApplicationSecrets", c.CanDeleteApplicationSecrets);
+        yield return new("canCreateApplications", c.CanCreateApplications);
+        yield return new("canReadAzureResources", c.CanReadAzureResources);
+        yield return new("canReadKeyVaultMetadata", c.CanReadKeyVaultMetadata);
+    }
+}

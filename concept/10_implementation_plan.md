@@ -2,17 +2,9 @@
 
 ## Status
 
-Pending user approval for code generation.
+**Approved — Phase 1 implementation in progress.**
 
-All concept files are MVP-stable. ADRs 0001–0006 are accepted. Open questions OQ-001 through OQ-044 are Applied or In Review without blocking MVP Phase 1.
-
-To unlock code generation, the user must explicitly say:
-
-```text
-Concept freeze accepted. Start Phase 1 implementation.
-```
-
-This document defines the planned implementation increments. It does not yet authorize product code.
+Concept freeze accepted 2026-05-01. ADRs 0001–0006 accepted. Concept files 01–08 MVP-stable.
 
 ## Phase 0: Concept Finalization
 

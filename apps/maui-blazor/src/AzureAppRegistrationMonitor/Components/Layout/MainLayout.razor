@@ -1,0 +1,49 @@
+@inherits LayoutComponentBase
+
+<div class="aarm-layout">
+    <nav class="aarm-sidebar">
+        <div class="aarm-sidebar-brand">
+            <span class="aarm-brand-icon">🔑</span>
+            <span class="aarm-brand-name">AARM</span>
+        </div>
+        <ul class="aarm-nav">
+            <li>
+                <NavLink href="/" Match="NavLinkMatch.All">
+                    <span>🏠</span> Tenants
+                </NavLink>
+            </li>
+            <li>
+                <NavLink href="/dashboard">
+                    <span>📊</span> Dashboard
+                </NavLink>
+            </li>
+            <li>
+                <NavLink href="/secrets">
+                    <span>🔑</span> Secrets
+                </NavLink>
+            </li>
+            <li>
+                <NavLink href="/preflight">
+                    <span>✅</span> Preflight
+                </NavLink>
+            </li>
+            <li>
+                <NavLink href="/history">
+                    <span>📋</span> History
+                </NavLink>
+            </li>
+        </ul>
+    </nav>
+
+    <main class="aarm-main">
+        <ErrorBoundary>
+            <ChildContent>@Body</ChildContent>
+            <ErrorContent Context="ex">
+                <div class="aarm-error">
+                    <h3>Something went wrong</h3>
+                    <pre>@ex.Message</pre>
+                </div>
+            </ErrorContent>
+        </ErrorBoundary>
+    </main>
+</div>

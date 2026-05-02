@@ -1,0 +1,9 @@
+export const EXIT = {
+  OK: 0,
+  ERROR: 1,
+  AUTH_FAILED: 2,
+  PERMISSION_MISSING: 3,
+  CONFIG_INVALID: 4,
+  NO_DATA_SOURCE: 5,
+  FINDINGS_THRESHOLD: 10,
+} as const;

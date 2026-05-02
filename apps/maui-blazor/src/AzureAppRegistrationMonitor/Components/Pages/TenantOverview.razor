@@ -1,0 +1,102 @@
+@page "/"
+@inject TenantOverviewViewModel ViewModel
+@implements IDisposable
+
+<PageTitle>Tenants — AARM</PageTitle>
+
+<div class="aarm-page-header">
+    <h1>Tenants</h1>
+    <div class="aarm-actions">
+        <button class="btn btn-primary" @onclick="LoadAsync">Refresh</button>
+    </div>
+</div>
+
+@if (ViewModel.IsLoading)
+{
+    <div class="aarm-loading">Loading tenants…</div>
+}
+else if (ViewModel.ErrorMessage is not null)
+{
+    <div class="alert alert-danger">@ViewModel.ErrorMessage</div>
+}
+else if (!ViewModel.Tenants.Any())
+{
+    <div class="aarm-empty">
+        <p>No tenants configured.</p>
+        <p>Run <code>aarm tenants add</code> in a terminal to add your first tenant.</p>
+    </div>
+}
+else
+{
+    <table class="table aarm-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Tenant ID</th>
+                <th>Auth Mode</th>
+                <th>Preflight</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var tenant in ViewModel.Tenants)
+            {
+                var preflight = ViewModel.GetPreflight(tenant.TenantId);
+                var running = ViewModel.IsPreflightRunning(tenant.TenantId);
+
+                <tr>
+                    <td><strong>@tenant.DisplayName</strong></td>
+                    <td><code>@tenant.TenantId</code></td>
+                    <td>@tenant.AuthMode</td>
+                    <td>
+                        @if (running)
+                        {
+                            <span class="badge bg-secondary">Running…</span>
+                        }
+                        else if (preflight is not null)
+                        {
+                            <span class="badge @(preflight.AuthValid && preflight.GraphReachable ? "bg-success" : "bg-danger")">
+                                @(preflight.AuthValid && preflight.GraphReachable ? "OK" : "Failed")
+                            </span>
+                            @if (preflight.MissingPermissions.Any())
+                            {
+                                <span class="badge bg-warning ms-1">@preflight.MissingPermissions.Count missing</span>
+                            }
+                        }
+                        else
+                        {
+                            <span class="text-muted">Not checked</span>
+                        }
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary"
+                                disabled="@running"
+                                @onclick="() => RunPreflightAsync(tenant.DisplayName)">
+                            Preflight
+                        </button>
+                        <a class="btn btn-sm btn-outline-secondary ms-1"
+                           href="/secrets/@Uri.EscapeDataString(tenant.DisplayName)">
+                            Scan Secrets
+                        </a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    protected override async Task OnInitializedAsync()
+        => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await ViewModel.LoadTenantsAsync();
+        StateHasChanged();
+    }
+
+    private async Task RunPreflightAsync(string tenantName)
+        => await ViewModel.RunPreflightAsync(tenantName, StateHasChanged);
+
+    public void Dispose() { }
+}
