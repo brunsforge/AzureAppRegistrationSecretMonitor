@@ -78,6 +78,31 @@ export class GraphApplicationReader {
     return results;
   }
 
+  /**
+   * Find a single application by exact display name.
+   * Returns null when no match or more than one match is found.
+   * Uses server-side $filter — no full page scan required.
+   */
+  async findByDisplayName(displayName: string): Promise<GraphApplication | null> {
+    try {
+      const encoded = encodeURIComponent(displayName.replace(/'/g, "''"));
+      const response = await this.client
+        .api('/applications')
+        .filter(`displayName eq '${encoded}'`)
+        .select('id,appId,displayName,createdDateTime,passwordCredentials')
+        .top(2)
+        .get() as { value: GraphApplication[] };
+
+      if (response.value.length === 1) return response.value[0];
+      return null;
+    } catch (err) {
+      throw new GraphError(
+        `Failed to find application by name "${displayName}": ${err instanceof Error ? err.message : String(err)}`,
+        (err as { statusCode?: number }).statusCode,
+      );
+    }
+  }
+
   async getApplicationOwners(applicationObjectId: string): Promise<GraphOwner[]> {
     try {
       const response = await this.client

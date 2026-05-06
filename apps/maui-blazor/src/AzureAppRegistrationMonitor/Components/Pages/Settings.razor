@@ -1,6 +1,7 @@
 @page "/settings"
 @inject TenantConfigRepository TenantRepo
 @inject SettingsService SettingsSvc
+@inject TeamsNotificationService Teams
 
 <PageTitle>Settings — AARM</PageTitle>
 
@@ -51,6 +52,38 @@
     </div>
 
     <button class="btn btn-primary btn-sm" @onclick="SaveAsync">Save preferences</button>
+</section>
+
+<!-- ── Teams Notifications ────────────────────────────────────────────────── -->
+<section class="settings-section">
+    <h2>Teams Notifications</h2>
+    <p class="text-muted" style="font-size:.8rem">
+        Configure an incoming webhook URL to send secret reports or status updates to a Teams channel.
+        Create the webhook in Teams → Channel → Connectors → Incoming Webhook.
+    </p>
+
+    <div class="settings-row">
+        <label>Incoming webhook URL</label>
+        <input class="form-control" style="max-width:600px"
+               placeholder="https://…webhook.office.com/webhookb2/…"
+               @bind="SettingsSvc.Settings.TeamsWebhookUrl" />
+        <small>Leave empty to disable Teams notifications. The URL is stored in <code>~/.aarm/ui-settings.json</code>.</small>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(SettingsSvc.Settings.TeamsWebhookUrl))
+    {
+        <button class="btn btn-outline-secondary btn-sm" @onclick="TestTeamsAsync">
+            @(_testingTeams ? "Sending…" : "Test webhook")
+        </button>
+        @if (_teamsTestResult is not null)
+        {
+            <span class="ms-2" style="font-size:.85rem;color:@(_teamsTestOk ? "var(--color-ok)" : "var(--color-error)")">
+                @_teamsTestResult
+            </span>
+        }
+    }
+
+    <button class="btn btn-primary btn-sm mt-2" @onclick="SaveAsync">Save preferences</button>
 </section>
 
 <!-- ── Configured Tenants ────────────────────────────────────────────────── -->
@@ -131,6 +164,9 @@
     private string? _editingTenant;
     private string _editAuthMode = "interactive-browser";
     private bool _saved;
+    private bool _testingTeams;
+    private string? _teamsTestResult;
+    private bool _teamsTestOk;
 
     protected override async Task OnInitializedAsync()
     {
@@ -163,4 +199,30 @@
 
     private static bool IsNonSecretMode(string mode) =>
         mode is "interactive-browser" or "device-code" or "azure-cli";
+
+    private async Task TestTeamsAsync()
+    {
+        await SettingsSvc.SaveAsync();
+        _testingTeams = true;
+        _teamsTestResult = null;
+        StateHasChanged();
+        try
+        {
+            await Teams.SendSecretsReportAsync(
+                Array.Empty<AzureAppRegistrationMonitor.Models.SecretSummary>(),
+                "Test — AARM");
+            _teamsTestOk = true;
+            _teamsTestResult = "✓ Message sent successfully.";
+        }
+        catch (Exception ex)
+        {
+            _teamsTestOk = false;
+            _teamsTestResult = $"✗ {ex.Message}";
+        }
+        finally
+        {
+            _testingTeams = false;
+            StateHasChanged();
+        }
+    }
 }

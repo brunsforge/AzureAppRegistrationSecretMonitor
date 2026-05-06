@@ -28,7 +28,7 @@ CLAUDE.md
 | `07_maui_blazor_ui_concept.md` | MVP-stable | Claude-assisted | Desktop UI architecture and screens | mockups, implementation |
 | `08_mockups.md` | MVP-stable | Claude-assisted | Textual UI sketches | implementation |
 | `09_open_questions.md` | Active | Claude-maintained | Unresolved questions and assumptions | every planning update |
-| `10_implementation_plan.md` | Pending approval | Claude-assisted | Implementation increments after concept stabilization | product code |
+| `10_implementation_plan.md` | Approved | Claude-assisted | Implementation increments after concept stabilization | product code |
 | `11_skills_and_agents_plan.md` | Active | Claude-assisted | Claude skills, agents and command conventions | orchestration changes |
 | `99_orchestration.md` | Active | Manual-owned | How Claude should route and maintain work | every command |
 

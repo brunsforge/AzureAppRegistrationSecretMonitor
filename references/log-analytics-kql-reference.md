@@ -62,21 +62,28 @@ Default value: 90 days (suggested; subject to UI/CLI design decision).
 
 ## Result codes for expired secret findings
 
-**OQ-041 is In Review** — the following codes are candidates, pending validation in a real tenant.
+**OQ-041 Applied** — codes partially confirmed from Microsoft documentation; real-tenant validation still recommended.
 
-| ResultType | AADSTS Code | Description |
-|---|---|---|
-| `7000222` | AADSTS7000222 | The provided client_secret keys for app have expired |
-| `700215` | AADSTS700215 | Invalid client_secret provided (may include wrong or expired) |
-| `700016` | AADSTS700016 | Application not found in directory for tenant |
+Reference: [Microsoft Entra error codes](https://learn.microsoft.com/en-us/entra/identity-platform/reference-error-codes)
+
+| ResultType | AADSTS Code | Description | Status |
+|---|---|---|---|
+| `7000222` | AADSTS7000222 | The provided client_secret keys for app have expired | Candidate — most specific expiry code; not yet confirmed via documentation review; prioritize if found in tenant |
+| `7000215` | AADSTS7000215 | Invalid client secret provided (developer error — app signed in without correct authentication parameters) | Confirmed in documentation |
+| `700016` | AADSTS700016 | Application not found in directory / UnauthorizedClient_DoesNotMatchRequest | Confirmed in documentation — indicates configuration problem, not expiry alone |
+
+Note: AADSTS700016 signals a directory or tenant configuration issue rather than secret expiry. Use it alongside credential key ID context and `endDateTime` when classifying findings.
 
 **Recommended analysis approach:**
 
-- Non-zero ResultType values from a specific key ID after its `endDateTime` = strong expired-secret signal.
-- `7000222` is the most specific code for expired client secret.
-- Surface all non-zero results in the evidence table; filter by these codes for the "failed after expiry" finding.
+- Non-zero ResultType from a specific key ID after its `endDateTime` = strong expired-secret signal regardless of code.
+- `7000222` is the most expiry-specific code — prioritize it when found; real-tenant validation still needed.
+- `7000215` (invalid secret) is relevant but not expiry-specific — may also appear for misconfigured credentials.
+- `700016` indicates app/tenant configuration errors — useful context, not an expiry indicator on its own.
+- Surface all non-zero results in the evidence table; annotate findings with the specific code and its description.
+- Filter by `7000222` and `7000215` for the "failed after expiry" finding classification.
 
-Validate these codes against a real tenant with an expired secret before hardcoding them.
+Further codes may be relevant — consult the Microsoft error codes reference above before finalising hardcoded filters.
 
 ## IP enrichment
 

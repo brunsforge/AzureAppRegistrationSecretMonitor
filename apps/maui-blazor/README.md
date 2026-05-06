@@ -42,14 +42,14 @@ The UI calls the CLI, reads stdout, and deserialises the `ResultEnvelope<T>` JSO
 | Requirement | Version | Install |
 |---|---|---|
 | Windows | 10 build 19041+ or Windows 11 | — |
-| .NET 9 SDK | 9.0 or later | [dot.net](https://dot.net) |
+| .NET 10 SDK | 10.0 or later | [dot.net](https://dot.net) |
 | MAUI workload | — | `dotnet workload install maui-windows` |
 | aarm CLI | 0.1.0+ | See [packages/cli/README.md](../../packages/cli/README.md) |
 
 Check installed versions:
 
 ```powershell
-dotnet --version          # must be 9.x
+dotnet --version          # must be 10.x
 dotnet workload list      # must show maui or maui-windows
 node packages/cli/dist/index.js --version   # or: aarm --version
 ```
@@ -64,9 +64,8 @@ cd apps\maui-blazor\src\AzureAppRegistrationMonitor
 
 # Restore NuGet packages
 dotnet restore
-
 # Build for Windows
-dotnet build -f net9.0-windows10.0.19041.0
+dotnet build -f net10.0-windows10.0.19041.0
 ```
 
 If `dotnet restore` fails because of missing workload:
@@ -82,7 +81,7 @@ dotnet restore
 
 ```powershell
 # From the project folder
-dotnet run -f net9.0-windows10.0.19041.0
+dotnet run -f net10.0-windows10.0.19041.0
 ```
 
 The app opens a desktop window with a sidebar navigation. The system tray icon appears in the notification area. Closing the window hides it to the tray — right-click the tray icon and choose **Exit** to quit the process.
@@ -145,6 +144,62 @@ aarm tenants add --tenant-id <guid> --display-name "Your Tenant" --auth-mode dev
 
 ---
 
+## Settings
+
+Open **AARM → Settings** from the sidebar to configure UI preferences and inspect configured tenants.
+
+### CLI path override
+
+The **CLI path override** field tells the app where to find the `aarm` CLI when it is not installed globally or when you want to use a specific local build during development.
+
+**When to use it:**
+
+| Situation | Recommended approach |
+|---|---|
+| Running from the repo during development, CLI not globally installed | Set CLI path override to the local `dist/index.js` |
+| Want to test a new CLI version before publishing | Point override to that version's `dist/index.js` |
+| `aarm` is globally installed and working | Leave this field empty |
+
+**What to enter:**
+
+Enter the full path to the CLI entry point — the compiled `index.js` file inside the `dist/` folder:
+
+```
+C:\dev\AzureAppRegistrationSecretMonitor\packages\cli\dist\index.js
+```
+
+The app runs `node <path>` in place of calling `aarm` directly. Node.js must be on PATH (the app calls `where node` to locate it).
+
+**Changes take effect immediately** — no restart required.
+
+**Resolution order** (the app checks in this order and uses the first match):
+
+| Priority | Location | What the app does |
+|---|---|---|
+| 1 | `aarm.cmd` / `aarm.exe` next to the app `.exe` | Calls it directly (bundled deployment) |
+| 2 | `%APPDATA%\npm\aarm.cmd` | Calls it directly (`npm install -g`) |
+| 3 | CLI path override (Settings page) | Runs `node <path>` |
+| 4 | `AARM_CLI_PATH` environment variable | Runs `node <path>` |
+| 5 | `aarm` on PATH | Calls it directly (`npm link`) |
+
+> **Development shortcut:** Instead of the Settings page you can set the `AARM_CLI_PATH` environment variable in your shell before launching the app — it has the same effect as the Settings field but does not persist across app restarts.
+
+### Default tenant and auth mode
+
+- **Default tenant** — pre-selected in all dropdowns when the app opens.
+- **Default auth mode for new tenants** — pre-selected when you add a tenant from within the UI.
+
+### Configured tenants
+
+The tenants table reflects the same `~/.aarm/tenants.json` file that the CLI writes. For non-secret auth modes (`interactive-browser`, `device-code`, `azure-cli`) you can change the auth mode directly in the UI. For modes that store a credential (`client-secret`, `username-password`, `certificate`) the credential must be reconfigured via the CLI:
+
+```powershell
+aarm tenants remove "Your Tenant"
+aarm tenants add --tenant-id <guid> --display-name "Your Tenant" --auth-mode client-secret --client-id <guid>
+```
+
+---
+
 ## Project structure
 
 ```
@@ -203,14 +258,22 @@ The UI never writes credentials. Secret key material stays in Windows Credential
 
 ### `aarm` not found when the app starts a scan
 
-The app searches for `aarm.cmd` or `aarm.exe` next to its own executable, then falls back to PATH. Install the CLI globally:
+The app searches for the CLI in this order: bundled `aarm.cmd/exe` next to the app, `%APPDATA%\npm\aarm.cmd`, CLI path override from Settings, `AARM_CLI_PATH` env var, then `aarm` on PATH.
+
+**Quickest fix during development** — open **Settings → CLI path override** and enter the full path to `packages\cli\dist\index.js`:
+
+```
+C:\dev\AzureAppRegistrationSecretMonitor\packages\cli\dist\index.js
+```
+
+**Or** install globally and restart the app:
 
 ```powershell
 cd packages\cli
 npm link
 ```
 
-Or copy `packages\cli\dist\` into the MAUI app's output folder.
+**Or** copy `packages\cli\dist\` into the MAUI app's output folder so it is found as a bundled executable.
 
 ### `The type initializer for 'H.NotifyIcon...' threw an exception`
 
@@ -224,12 +287,12 @@ dotnet workload install maui-windows
 dotnet workload repair
 ```
 
-### Build error: `net9.0-windows10.0.19041.0` not found
+### Build error: `net10.0-windows10.0.19041.0` not found
 
-You need the .NET 9 SDK with the Windows targeting pack:
+You need the .NET 10 SDK with the Windows targeting pack:
 
 ```powershell
-winget install Microsoft.DotNet.SDK.9
+winget install Microsoft.DotNet.SDK.10
 dotnet workload install maui-windows
 ```
 

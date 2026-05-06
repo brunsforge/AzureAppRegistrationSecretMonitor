@@ -25,6 +25,7 @@ public record TenantProfile(
     [property: JsonPropertyName("clientId")] string? ClientId,
     [property: JsonPropertyName("username")] string? Username,
     [property: JsonPropertyName("defaultEnvironmentName")] string? DefaultEnvironmentName,
+    [property: JsonPropertyName("logAnalyticsWorkspaceId")] string? LogAnalyticsWorkspaceId,
     [property: JsonPropertyName("createdAt")] string CreatedAt,
     [property: JsonPropertyName("updatedAt")] string UpdatedAt,
     [property: JsonPropertyName("lastPreflightAt")] string? LastPreflightAt,

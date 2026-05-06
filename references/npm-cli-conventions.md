@@ -63,3 +63,11 @@ The CLI must not store client secrets in plain JSON files.
 Use placeholders in examples and prefer OS credential storage or secure secret stores.
 
 **Decided by ADR-0005:** Use `keytar` (Windows Credential Manager) for storing client secret values in the npm CLI.
+
+## History persistence convention
+
+`aarm secrets list` automatically persists its result to the local history store on successful completion (decided by OQ-045).
+
+- No separate scan command exists; history saving is a side effect of the list command.
+- Persistence errors must not change the command exit code — report them as warnings in the output envelope only.
+- History files follow the same cache directory as tenant profiles (`--config-dir`).

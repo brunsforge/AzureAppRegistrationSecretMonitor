@@ -26,11 +26,14 @@ public static class MauiProgram
 #endif
 
         // Infrastructure services
+        builder.Services.AddSingleton<AppStateService>();
+        builder.Services.AddSingleton<AppInitializationService>();
         builder.Services.AddSingleton<CliExecutionService>();
         builder.Services.AddSingleton<TenantConfigRepository>();
         builder.Services.AddSingleton<HistoryRepository>();
         builder.Services.AddSingleton<SettingsService>();
         builder.Services.AddSingleton<SystemTrayService>();
+        builder.Services.AddSingleton<TeamsNotificationService>();
 
         // View models
         builder.Services.AddTransient<TenantOverviewViewModel>();

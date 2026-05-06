@@ -66,7 +66,13 @@ export {
   isDelegatedMode,
 } from './preflight/PermissionHintMapper.js';
 
-export type { LogAnalyticsCapabilityResult } from './usage/LogAnalyticsClient.js';
+export type {
+  AppUsageResult,
+  LogAnalyticsCapabilityResult,
+  SecretUsageResult,
+  UsageObservation,
+  UsageSummary,
+} from './usage/LogAnalyticsClient.js';
 export { LogAnalyticsClient } from './usage/LogAnalyticsClient.js';
 
 export {

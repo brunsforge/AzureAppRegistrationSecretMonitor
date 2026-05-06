@@ -9,7 +9,9 @@ import {
   type CapabilitySet,
   type PreflightResult,
 } from '@brunsforge/azure-app-registration-monitor';
-import { buildContext, handleError } from '../shared/context.js';
+import { buildContext, handleError, type GlobalOptions } from '../shared/context.js';
+import { ConfigStore } from '../config/ConfigStore.js';
+import { HistoryStore } from '../config/HistoryStore.js';
 
 function tick(value: boolean): string {
   return value ? chalk.green('[✓]') : chalk.red('[ ]');
@@ -90,6 +92,17 @@ export function registerPreflightCommand(program: Command): void {
           logAnalyticsWorkspaceId: ctx.logAnalyticsWorkspaceId,
         });
 
+        // Auto-save preflight result to history
+        const history = new HistoryStore(ctx.configStore.getConfigDir());
+        void history.save('preflight', ctx.tenantId, ctx.environmentName, result);
+
+        // Update lastPreflightAt on the tenant profile
+        void ctx.configStore.upsertTenant({
+          ...ctx.tenant,
+          lastPreflightAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+
         if (ctx.isJson) {
           process.stdout.write(
             envelopeToJson(
@@ -109,15 +122,36 @@ export function registerPreflightCommand(program: Command): void {
 
   preflight
     .command('show')
-    .description('Show the last cached preflight result')
-    .action(() => {
-      // Use stderr so this message doesn't corrupt --output json consumers
-      process.stderr.write(
-        chalk.dim(
-          'Cached preflight results will be available once local history storage (Phase 5) is implemented.\n' +
-            'Run "aarm preflight run" to perform a live check.\n',
-        ),
-      );
+    .description('Show the last cached preflight result (no network call)')
+    .action(async () => {
+      const opts = program.opts<GlobalOptions>();
+      if (!opts.tenant) {
+        process.stderr.write('Error: --tenant is required.\n');
+        process.exit(1);
+      }
+      const store = new ConfigStore(opts.configDir);
+      const tenant = await store.getTenant(opts.tenant);
+      if (!tenant) {
+        process.stderr.write(`Error: Tenant "${opts.tenant}" not found.\n`);
+        process.exit(1);
+      }
+      const history = new HistoryStore(store.getConfigDir());
+      const envName = tenant.defaultEnvironmentName ?? 'default';
+      const cached = await history.loadLatest<PreflightResult>('preflight', tenant.tenantId, envName);
+      if (!cached) {
+        process.stderr.write(
+          chalk.dim('No cached preflight result. Run "aarm preflight run --tenant <name>" first.\n'),
+        );
+        process.exit(1);
+      }
+      if (opts.output === 'json') {
+        process.stdout.write(
+          envelopeToJson(createResultEnvelope(cached, tenant.tenantId, envName)) + '\n',
+        );
+      } else {
+        process.stderr.write(chalk.dim(`Showing cached result from ${cached.checkedAt}\n\n`));
+        printPreflightTable(cached);
+      }
     });
 
   preflight

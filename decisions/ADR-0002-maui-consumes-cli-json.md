@@ -40,6 +40,9 @@ The CLI must also be usable as a standalone npm package independent of MAUI.
 
 No HTTP bridge is needed for MVP. Process invocation with JSON output is the only integration boundary.
 
+The specific bundling mechanism is decided in **ADR-0007**: esbuild bundles the TypeScript CLI to `aarm.js`; a pre-built `keytar.node` and a pinned `node.exe` (Node.js LTS) are shipped alongside in a `cli/` subfolder of the install directory. MAUI invokes `cli\node.exe cli\aarm.js [args]`.
+
 ## Follow-up
 
-Define JSON schemas before implementation.
+- Define JSON schemas before implementation.
+- See ADR-0007 for CLI build automation and bundle layout details.

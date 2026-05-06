@@ -25,6 +25,17 @@ Every feature screen should define:
 - authentication/authorization error state
 - external service unavailable state
 
+## Core application services
+
+These singleton services are registered in the DI container and are available to all pages:
+
+| Service | Responsibility |
+|---|---|
+| `AppInitializationService` | Runs at startup: creates directories, verifies CLI path, loads last preflight results |
+| `AppStateService` | Holds active `TenantProfile` and `EnvironmentProfile`; raises `OnChange` event on selection change |
+| `ICliLocatorService` | Resolves the `aarm` binary path; debug mode reads from config, release mode uses `AppContext.BaseDirectory` |
+| `CliExecutionService` | Invokes the CLI process and returns parsed JSON output |
+
 ## MVP integration rule
 
 The MAUI Blazor app invokes the CLI and consumes stable JSON output.

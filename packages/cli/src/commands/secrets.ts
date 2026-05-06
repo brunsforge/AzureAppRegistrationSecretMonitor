@@ -7,6 +7,7 @@ import {
 } from '@brunsforge/azure-app-registration-monitor';
 import { buildContext, handleError } from '../shared/context.js';
 import { printSecretsTable } from '../output/formatters.js';
+import { HistoryStore } from '../config/HistoryStore.js';
 
 function allSecrets(inventory: AppRegistrationSummary[]): SecretSummary[] {
   return inventory.flatMap((app) => app.secrets);
@@ -26,11 +27,21 @@ export function registerSecretsCommand(program: Command): void {
         const ctx = await buildContext(program.opts());
         const inventory = await ctx.inventoryService.getInventory();
         const flat = allSecrets(inventory);
+        const envelope = createResultEnvelope(flat, ctx.tenantId, ctx.environmentName);
+
+        // Auto-save history — side effect, failures are swallowed inside HistoryStore
+        const history = new HistoryStore(ctx.configStore.getConfigDir());
+        void history.save('secrets', ctx.tenantId, ctx.environmentName, envelope);
+
+        // Update lastSuccessfulScanAt on the tenant profile
+        void ctx.configStore.upsertTenant({
+          ...ctx.tenant,
+          lastSuccessfulScanAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
 
         if (ctx.isJson) {
-          process.stdout.write(
-            envelopeToJson(createResultEnvelope(flat, ctx.tenantId, ctx.environmentName)) + '\n',
-          );
+          process.stdout.write(envelopeToJson(envelope) + '\n');
         } else {
           printSecretsTable(flat);
         }

@@ -9,11 +9,12 @@ namespace AzureAppRegistrationMonitor.Services;
 /// <summary>
 /// Invokes the aarm CLI as a child process and deserialises the JSON output envelope.
 ///
-/// Binary resolution order:
-///   1. aarm.cmd / aarm.exe alongside the app executable (bundled deployment)
-///   2. %APPDATA%\npm\aarm.cmd (npm install -g on Windows)
-///   3. AARM_CLI_PATH env var pointing to the CLI script + node on PATH (development)
-///   4. "aarm" on PATH (npm link)
+/// Binary resolution order (checked on every invocation so Settings changes take effect immediately):
+///   1. aarm.cmd / aarm.exe alongside the app executable  (bundled deployment)
+///   2. %APPDATA%\npm\aarm.cmd                            (npm install -g on Windows)
+///   3. Settings.CliPathOverride → node &lt;script&gt;      (set in AARM Settings page)
+///   4. AARM_CLI_PATH env var  → node &lt;script&gt;       (set before launching the app)
+///   5. "aarm" on PATH                                     (npm link)
 /// </summary>
 public class CliExecutionService
 {
@@ -22,12 +23,11 @@ public class CliExecutionService
         PropertyNameCaseInsensitive = true,
     };
 
-    private readonly string _binaryPath;
-    private readonly string? _scriptPath; // set when using node <script> mode
+    private readonly SettingsService _settings;
 
-    public CliExecutionService()
+    public CliExecutionService(SettingsService settings)
     {
-        (_binaryPath, _scriptPath) = FindBinary();
+        _settings = settings;
     }
 
     /// <summary>Run an aarm command and deserialise the result envelope.</summary>
@@ -35,8 +35,9 @@ public class CliExecutionService
         string tenantNameOrId,
         params string[] args)
     {
-        var fullArgs = BuildArgs(tenantNameOrId, args);
-        var (stdout, exitCode) = await ExecuteAsync(fullArgs);
+        var (binary, script) = FindBinary();
+        var fullArgs = BuildArgs(tenantNameOrId, args, script);
+        var (stdout, exitCode) = await ExecuteAsync(binary, fullArgs);
 
         if (string.IsNullOrWhiteSpace(stdout))
             throw new CliException($"aarm exited with code {exitCode} and produced no output.");
@@ -54,32 +55,33 @@ public class CliExecutionService
     /// <summary>Run an aarm command and return raw stdout.</summary>
     public async Task<string> RunRawAsync(string tenantNameOrId, params string[] args)
     {
-        var (stdout, _) = await ExecuteAsync(BuildArgs(tenantNameOrId, args));
+        var (binary, script) = FindBinary();
+        var (stdout, _) = await ExecuteAsync(binary, BuildArgs(tenantNameOrId, args, script));
         return stdout;
     }
 
-    private string[] BuildArgs(string tenantNameOrId, string[] extraArgs)
+    // ── Internals ─────────────────────────────────────────────────────────────
+
+    private static string[] BuildArgs(string tenantNameOrId, string[] extraArgs, string? scriptPath)
     {
         var list = new List<string>();
-        // When running via "node <script>" the script path is prepended as first arg
-        if (_scriptPath is not null) list.Add(_scriptPath);
+        if (scriptPath is not null) list.Add(scriptPath); // "node <script> --tenant …"
         list.AddRange(new[] { "--tenant", tenantNameOrId, "--output", "json" });
         list.AddRange(extraArgs);
         return list.ToArray();
     }
 
-    private async Task<(string Stdout, int ExitCode)> ExecuteAsync(string[] args)
+    private static async Task<(string Stdout, int ExitCode)> ExecuteAsync(string binary, string[] args)
     {
         var psi = new ProcessStartInfo
         {
-            FileName = _binaryPath,
+            FileName = binary,
             RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
+            RedirectStandardError  = true,
+            UseShellExecute  = false,
+            CreateNoWindow   = true,
             StandardOutputEncoding = Encoding.UTF8,
         };
-
         foreach (var arg in args) psi.ArgumentList.Add(arg);
 
         using var process = new Process { StartInfo = psi };
@@ -108,12 +110,14 @@ public class CliExecutionService
     }
 
     /// <summary>
-    /// Returns (binaryPath, scriptPath?) where scriptPath is non-null when
-    /// running via "node &lt;scriptPath&gt;" instead of a native binary.
+    /// Resolves the CLI binary on every call so that changes in Settings take
+    /// effect immediately without restarting the app.
+    /// Returns (binaryPath, scriptPath?) — scriptPath is non-null when running
+    /// via "node &lt;scriptPath&gt;" instead of a native aarm binary.
     /// </summary>
-    private static (string Binary, string? Script) FindBinary()
+    private (string Binary, string? Script) FindBinary()
     {
-        // 1. Bundled alongside the MAUI app executable
+        // 1. Bundled alongside the MAUI executable (production deployment)
         var appDir = Path.GetDirectoryName(Environment.ProcessPath) ?? ".";
         foreach (var name in new[] { "aarm.cmd", "aarm.exe" })
         {
@@ -121,13 +125,22 @@ public class CliExecutionService
             if (File.Exists(p)) return (p, null);
         }
 
-        // 2. npm global install — %APPDATA%\npm\aarm.cmd (Windows default)
+        // 2. npm global install location (%APPDATA%\npm\aarm.cmd on Windows)
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         var npmCmd = Path.Combine(appData, "npm", "aarm.cmd");
         if (File.Exists(npmCmd)) return (npmCmd, null);
 
-        // 3. AARM_CLI_PATH env var — point to the CLI dist/index.js for development
-        //    Usage: $env:AARM_CLI_PATH = "C:\...\packages\cli\dist\index.js"
+        // 3. Settings page override — highest-priority dev override
+        //    Set this in AARM → Settings → CLI path override
+        //    e.g.  C:\dev\AzureAppRegistrationSecretMonitor\packages\cli\dist\index.js
+        var settingsScript = _settings.Settings.CliPathOverride;
+        if (!string.IsNullOrEmpty(settingsScript) && File.Exists(settingsScript))
+        {
+            var node = FindNodeExe();
+            if (node is not null) return (node, settingsScript);
+        }
+
+        // 4. AARM_CLI_PATH environment variable (set before launching the app)
         var envScript = Environment.GetEnvironmentVariable("AARM_CLI_PATH");
         if (!string.IsNullOrEmpty(envScript) && File.Exists(envScript))
         {
@@ -135,7 +148,7 @@ public class CliExecutionService
             if (node is not null) return (node, envScript);
         }
 
-        // 4. PATH fallback — works after npm link or global install
+        // 5. PATH fallback — npm link or global install
         return ("aarm", null);
     }
 

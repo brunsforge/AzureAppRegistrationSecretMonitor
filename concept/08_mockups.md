@@ -24,19 +24,27 @@ These are textual mockups for planning. They are not final UI designs.
 ```text
 Tenant: Contoso
 Environment: PROD
+App Registration: CRM Integration App  (<client-id>)
+Preflight run: 2026-05-05 10:30
 
 Authentication: OK
 Microsoft Graph: OK
 Log Analytics: Warning
 Write Operations: Disabled
 
-Capabilities
-[✓] Read App Registrations
-[✓] Read Secrets
-[ ] Read Owners
-[✓] Query Log Analytics
-[ ] Create Secrets
-[ ] Delete Secrets
+--- Required Set -----------------------------------------------
+[✓] Read App Registrations          App list available
+[✓] Read Secrets                    Secret metadata available
+[~] Read Service Principals         Enrichment limited
+[ ] Read Owners                     Owner column hidden
+
+--- Extended Set (nice to have) --------------------------------
+[✓] Query Log Analytics             Usage Analysis tab enabled
+[✓] Analyze SP Sign-in Logs         Last-seen data available
+[ ] Read Azure Resources            IP enrichment unavailable
+[ ] Read Key Vault Metadata         Key Vault scan unavailable
+[ ] Create / Delete Secrets         Rotation automation disabled
+[ ] Create App Registrations        App creation hidden
 
 Missing / limited:
 - Directory.Read.All may be needed to resolve owners.
@@ -64,11 +72,13 @@ Tenant: Contoso PROD
 ## 4. Secret List
 
 ```text
-Risk      App Name        Secret        Expires     Days  Last Seen
-CRITICAL  Export Worker   prod-secret   expired     -4    yesterday
-HIGH      CRM Connector   crm-prod      2026-05-21  21    2 days ago
-MEDIUM    Teams Bot       bot-secret    2026-07-10  71    unknown
-LOW       Test Tool       dev-secret    2026-11-01  185   never
+Risk      App Name        Secret        Expires     Days  Last Seen     [↗]
+CRITICAL  Export Worker   prod-secret   expired     -4    yesterday     [↗]
+HIGH      CRM Connector   crm-prod      2026-05-21  21    2 days ago    [↗]
+MEDIUM    Teams Bot       bot-secret    2026-07-10  71    unknown       [↗]
+LOW       Test Tool       dev-secret    2026-11-01  185   never         [↗]
+
+[↗] opens the App Registration directly in Azure Portal (system browser)
 ```
 
 ## 5. Secret Detail
@@ -122,17 +132,35 @@ Required:
 | Display Name:   [Contoso PROD             ]                  |
 | Tenant ID:      [<tenant-id>              ]                  |
 | Environment:    [PROD                     ]                  |
+|                                                              |
 | Auth Mode:      ( ) Client Secret                            |
-|                 ( ) Certificate                              |
+|                 ( ) Certificate           (Post-MVP)         |
 |                 (•) Interactive Browser                      |
 |                 ( ) Device Code                              |
+|                 ( ) Azure CLI                                |
+|                                                              |
+| ℹ The app opens a browser window for login. A localhost      |
+|   redirect URI must be registered on the App Registration.   |
 |                                                              |
 | Log Analytics Workspace ID:                                  |
 |                 [<workspace-id>           ] (optional)       |
 |                                                              |
+| Teams Webhook URL:                                           |
+|                 [                         ] (optional, Ph 2) |
+|                                                              |
 | [Cancel]                           [Validate] [Save Tenant]  |
 +--------------------------------------------------------------+
 ```
+
+Help text rules: the ℹ block below Auth Mode is dynamic — it changes when the user selects a different mode.
+
+| Mode selected | Help text shown |
+|---|---|
+| Client Secret | Enter Client ID and secret value. Secret is stored in Windows Credential Manager. |
+| Interactive Browser | The app opens a browser for login. A localhost redirect URI must be registered on the App Registration. |
+| Device Code | A code appears in the app. Open `microsoft.com/devicelogin` and enter the code. No redirect URI needed. |
+| Azure CLI | Requires `az` CLI installed and an active `az login` session. No Client ID or secret needed here. |
+| Certificate | Enter certificate thumbprint and file path. Private key must be accessible on this machine. (Post-MVP) |
 
 ## Section 8 — History
 

@@ -1,0 +1,19 @@
+<!-- .NET MAUI resource setup -->
+<ItemGroup>
+  <!-- App icon: foreground + generated background color -->
+  <MauiIcon Include="Resources\AppIcon\appicon.svg"
+            ForegroundFile="Resources\AppIcon\appiconfg.svg"
+            Color="#071B34" />
+
+  <!-- Splash screen -->
+  <MauiSplashScreen Include="Resources\Splash\splash.svg"
+                    Color="#071B34"
+                    BaseSize="512,512" />
+
+  <!-- UI icons -->
+  <MauiImage Include="Resources\Images\*.svg" />
+
+  <!-- Raw tray icons -->
+  <MauiAsset Include="Resources\Raw\tray.ico" LogicalName="tray.ico" />
+  <MauiAsset Include="Resources\Raw\tray_colored.ico" LogicalName="tray_colored.ico" />
+</ItemGroup>

@@ -76,12 +76,13 @@ Goal:
 - dashboard placeholders
 - CLI invocation abstraction
 - system tray icon and context menu (background running; confirmed MVP by OQ-043)
+- Azure Portal deep links in Secret List and Secret Detail (opens App Registration in system browser via `Launcher.OpenAsync`)
 
 ## Phase 5: History
 
 Goal:
 
-- store scan results as JSON files (decided by ADR-0004; SQLite in Phase 2)
+- store scan results as JSON files (decided by ADR-0004; SQLite deferred to a later phase after Phase 5 is stable)
 - compare scans
 - show changes over time
 
@@ -103,6 +104,14 @@ Goal:
 - key ID monitoring
 - warnings before deleting old credentials
 - write automation only after explicit ADR
+
+## Phase 8: Notifications and Integrations
+
+Goal:
+
+- Teams webhook notification: send secret summary or single-secret status as Adaptive Card to a configured Teams channel
+- webhook URL stored per tenant in tenant profile JSON (non-secret, plain config value)
+- "Send to Teams" button on Secret List (tenant summary) and Secret Detail (single entry)
 
 ## Code Generation Gate
 

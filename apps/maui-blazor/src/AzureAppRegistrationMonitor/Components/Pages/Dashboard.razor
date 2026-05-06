@@ -3,13 +3,16 @@
 @inject TenantConfigRepository TenantRepo
 @inject HistoryRepository HistoryRepo
 @inject SettingsService SettingsSvc
+@inject AppStateService AppState
+@implements IDisposable
 
 <PageTitle>Dashboard — AARM</PageTitle>
 
 <div class="aarm-page-header">
     <h1>Dashboard</h1>
 
-    <select class="form-select" style="max-width:220px" @bind="_selectedTenant">
+    <select class="form-select" style="max-width:220px"
+            value="@_selectedTenant" @onchange="OnTenantChangedAsync">
         <option value="">— Select tenant —</option>
         @foreach (var t in _tenants)
         {
@@ -129,16 +132,39 @@ else
     {
         _tenants = await TenantRepo.ListTenantsAsync();
 
-        // Auto-select: prefer last scanned, fall back to default, then first tenant
+        // Pre-select: AppState → last scanned → default → first tenant
         _selectedTenant =
+            AppState.ActiveTenant?.DisplayName ??
             SettingsSvc.Settings.LastScannedTenant ??
             SettingsSvc.Settings.DefaultTenant ??
             (_tenants.Count > 0 ? _tenants[0].DisplayName : "");
 
-        // Auto-load from history cache if available
+        AppState.OnChange += OnAppStateChanged;
+
         if (!string.IsNullOrEmpty(_selectedTenant))
             await TryLoadFromCacheAsync();
     }
+
+    private async void OnAppStateChanged()
+    {
+        if (AppState.ActiveTenant is not null &&
+            _selectedTenant != AppState.ActiveTenant.DisplayName)
+        {
+            _selectedTenant = AppState.ActiveTenant.DisplayName;
+            _apps = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OnTenantChangedAsync(ChangeEventArgs e)
+    {
+        _selectedTenant = e.Value?.ToString() ?? "";
+        AppState.SetActiveTenant(_tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant));
+        _apps = null;
+        await TryLoadFromCacheAsync();
+    }
+
+    public void Dispose() => AppState.OnChange -= OnAppStateChanged;
 
     private async Task TryLoadFromCacheAsync()
     {
@@ -189,6 +215,4 @@ else
         _highRiskApps = _apps.Count(a => a.RiskLevel is "Critical" or "High");
     }
 
-    private void OnTenantChanged(ChangeEventArgs e) =>
-        _selectedTenant = e.Value?.ToString() ?? "";
 }

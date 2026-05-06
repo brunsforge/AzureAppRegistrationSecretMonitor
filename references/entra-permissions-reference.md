@@ -57,6 +57,18 @@ These are not Graph permissions. They require Azure RBAC on Azure resources.
 
 The preflight service must attempt these checks and report the resulting capability flags so the UI can gate the affected features correctly (decided by OQ-044).
 
+## Azure Portal deep link pattern
+
+The following URL opens an App Registration directly in the Azure Portal by Client ID:
+
+```text
+https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Overview/appId/{clientId}
+```
+
+Usage in MAUI: open via `Launcher.OpenAsync(url)` in the system browser. No portal session is assumed — the user must be separately logged into the portal.
+
+This link is used in the Secret List and Secret Detail screens.
+
 ## Project rule
 
 The product must start with a read-only monitoring MVP.

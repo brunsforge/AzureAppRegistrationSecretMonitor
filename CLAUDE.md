@@ -24,7 +24,7 @@ The planned product consists of two applications:
 
 ## Current Phase
 
-This repository is in **concept phase**.
+This repository is in **phase 1, concept is freezed **.
 
 Do not create production code yet.
 

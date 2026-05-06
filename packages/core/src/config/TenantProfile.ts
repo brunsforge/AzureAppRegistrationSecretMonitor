@@ -9,6 +9,8 @@ export interface TenantProfile {
   clientId?: string;
   /** UPN / email address for username-password mode. Never used for other modes. */
   username?: string;
+  /** Log Analytics workspace ID for usage analysis (optional). */
+  logAnalyticsWorkspaceId?: string;
   createdAt: string;
   updatedAt: string;
   lastPreflightAt?: string;

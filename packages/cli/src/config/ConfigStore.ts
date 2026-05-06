@@ -8,6 +8,10 @@ const DEFAULT_CONFIG_DIR = join(homedir(), '.aarm');
 export class ConfigStore {
   constructor(private readonly configDir: string = DEFAULT_CONFIG_DIR) {}
 
+  getConfigDir(): string {
+    return this.configDir;
+  }
+
   private get tenantsPath(): string {
     return join(this.configDir, 'tenants.json');
   }

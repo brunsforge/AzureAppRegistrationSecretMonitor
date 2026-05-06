@@ -8,6 +8,7 @@ import {
   SecretInventoryService,
   type AuthConfig,
   type AuthMode,
+  type TenantProfile,
 } from '@brunsforge/azure-app-registration-monitor';
 import { ConfigStore } from '../config/ConfigStore.js';
 import { CredentialStore } from '../config/CredentialStore.js';
@@ -33,6 +34,7 @@ export interface CommandContext {
   graphReader: GraphApplicationReader;
   inventoryService: SecretInventoryService;
   preflightService: PreflightService;
+  tenant: TenantProfile;
   tenantId: string;
   environmentName: string;
   authMode: AuthMode;
@@ -133,9 +135,11 @@ export async function buildContext(opts: GlobalOptions): Promise<CommandContext>
     graphReader,
     inventoryService,
     preflightService,
+    tenant,
     tenantId: tenant.tenantId,
     environmentName: tenant.defaultEnvironmentName ?? 'default',
     authMode: tenant.authMode,
+    logAnalyticsWorkspaceId: tenant.logAnalyticsWorkspaceId,
     isJson: opts.output === 'json',
     verbose: opts.verbose,
   };

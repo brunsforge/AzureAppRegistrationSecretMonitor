@@ -1,5 +1,7 @@
 @page "/"
 @inject TenantOverviewViewModel ViewModel
+@inject AppStateService AppState
+@inject NavigationManager Nav
 @implements IDisposable
 
 <PageTitle>Tenants — AARM</PageTitle>
@@ -71,13 +73,13 @@ else
                     <td>
                         <button class="btn btn-sm btn-outline-primary"
                                 disabled="@running"
-                                @onclick="() => RunPreflightAsync(tenant.DisplayName)">
+                                @onclick="() => RunPreflightAsync(tenant)">
                             Preflight
                         </button>
-                        <a class="btn btn-sm btn-outline-secondary ms-1"
-                           href="/secrets/@Uri.EscapeDataString(tenant.DisplayName)">
+                        <button class="btn btn-sm btn-outline-secondary ms-1"
+                                @onclick="() => NavigateToSecrets(tenant)">
                             Scan Secrets
-                        </a>
+                        </button>
                     </td>
                 </tr>
             }
@@ -95,8 +97,17 @@ else
         StateHasChanged();
     }
 
-    private async Task RunPreflightAsync(string tenantName)
-        => await ViewModel.RunPreflightAsync(tenantName, StateHasChanged);
+    private async Task RunPreflightAsync(TenantProfile tenant)
+    {
+        AppState.SetActiveTenant(tenant);
+        await ViewModel.RunPreflightAsync(tenant.DisplayName, StateHasChanged);
+    }
+
+    private void NavigateToSecrets(TenantProfile tenant)
+    {
+        AppState.SetActiveTenant(tenant);
+        Nav.NavigateTo($"/secrets/{Uri.EscapeDataString(tenant.DisplayName)}");
+    }
 
     public void Dispose() { }
 }

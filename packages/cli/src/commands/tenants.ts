@@ -134,7 +134,8 @@ export function registerTenantsCommand(program: Command): void {
         displayName,
         authMode,
         clientId,
-        ...(workspaceId ? { defaultEnvironmentName: 'default' } : {}),
+        defaultEnvironmentName: 'default',
+        ...(workspaceId ? { logAnalyticsWorkspaceId: workspaceId } : {}),
         createdAt: now,
         updatedAt: now,
       };

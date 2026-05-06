@@ -72,6 +72,50 @@ export function printAppsTable(apps: AppRegistrationSummary[]): void {
   process.stdout.write(chalk.dim(`${apps.length} app registration(s)\n`));
 }
 
+export function secretsToMarkdown(
+  secrets: SecretSummary[],
+  tenantId: string,
+  envName: string,
+): string {
+  const lines: string[] = [
+    `# Secret Expiry Report`,
+    ``,
+    `**Tenant:** ${tenantId}  **Environment:** ${envName}  **Generated:** ${new Date().toISOString().slice(0, 10)}`,
+    ``,
+    `| Risk | App | Secret | Key ID | Expires | Days | Status |`,
+    `|------|-----|--------|--------|---------|------|--------|`,
+  ];
+  for (const s of secrets) {
+    const expires = s.endDateTime ? new Date(s.endDateTime).toISOString().slice(0, 10) : '—';
+    const days = s.daysUntilExpiry !== null ? String(s.daysUntilExpiry) : '—';
+    const keyShort = s.keyId ? s.keyId.slice(0, 8) + '…' : '—';
+    lines.push(
+      `| ${s.riskLevel} | ${s.appDisplayName} | ${s.displayName ?? '—'} | ${keyShort} | ${expires} | ${days} | ${s.status} |`,
+    );
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+export function secretsToCsv(secrets: SecretSummary[]): string {
+  const header = 'risk,app,appId,secret,keyId,startDate,endDate,daysUntilExpiry,status';
+  const rows = secrets.map((s) => {
+    const csv = (v: string | null | undefined) => `"${(v ?? '').replace(/"/g, '""')}"`;
+    return [
+      csv(s.riskLevel),
+      csv(s.appDisplayName),
+      csv(s.appId),
+      csv(s.displayName),
+      csv(s.keyId),
+      csv(s.startDateTime),
+      csv(s.endDateTime),
+      String(s.daysUntilExpiry ?? ''),
+      csv(s.status),
+    ].join(',');
+  });
+  return [header, ...rows, ''].join('\n');
+}
+
 export function printSecretsTable(secrets: SecretSummary[]): void {
   if (secrets.length === 0) {
     process.stdout.write('No secrets found.\n');

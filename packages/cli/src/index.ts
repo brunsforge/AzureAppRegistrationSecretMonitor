@@ -5,6 +5,8 @@ import { registerAppsCommand } from './commands/apps.js';
 import { registerPreflightCommand } from './commands/preflight.js';
 import { registerSecretsCommand } from './commands/secrets.js';
 import { registerTenantsCommand } from './commands/tenants.js';
+import { registerUsageCommand } from './commands/usage.js';
+import { registerReportCommand } from './commands/report.js';
 
 const program = new Command();
 
@@ -34,5 +36,7 @@ registerTenantsCommand(program);
 registerAppsCommand(program);
 registerSecretsCommand(program);
 registerPreflightCommand(program);
+registerUsageCommand(program);
+registerReportCommand(program);
 
 program.parse(process.argv);

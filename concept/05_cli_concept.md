@@ -59,6 +59,15 @@ aarm secrets show --app-id <client-id>
 aarm secrets show-key --key-id <secret-key-id>
 ```
 
+## Automatic History Persistence
+
+When `aarm secrets list` completes successfully, it automatically persists the result to the local history store as a side effect (decided by OQ-045).
+
+- No dedicated `aarm scan` command exists in the MVP.
+- Persistence happens after the result JSON is produced, before the process exits.
+- Persistence failures must not cause a non-zero exit code; they are reported as warnings in the output envelope only.
+- The history file location follows the same cache directory as tenant profiles and is configurable via `--config-dir`.
+
 ## Usage Analysis Commands
 
 ```bash

@@ -5,12 +5,17 @@ namespace AzureAppRegistrationMonitor;
 public partial class App : Application
 {
     private readonly SystemTrayService _tray;
+    private readonly AppInitializationService _init;
     private Window? _mainWindow;
 
-    public App(SystemTrayService tray)
+    public App(SystemTrayService tray, AppInitializationService init)
     {
         InitializeComponent();
         _tray = tray;
+        _init = init;
+        // Fire-and-forget: initialization must not block the UI thread.
+        // Failures are swallowed — the app can still open without a default tenant.
+        _ = _init.InitializeAsync();
     }
 
     protected override Window CreateWindow(IActivationState? activationState)

@@ -2,13 +2,16 @@
 @page "/preflight/{TenantName}"
 @inject CliExecutionService Cli
 @inject TenantConfigRepository TenantRepo
+@inject AppStateService AppState
+@implements IDisposable
 
 <PageTitle>Preflight — AARM</PageTitle>
 
 <div class="aarm-page-header">
     <h1>Preflight Check</h1>
 
-    <select class="form-select" style="max-width:220px" @bind="_selectedTenant">
+    <select class="form-select" style="max-width:220px"
+            value="@_selectedTenant" @onchange="OnTenantChanged">
         <option value="">— Select tenant —</option>
         @foreach (var t in _tenants)
         {
@@ -123,16 +126,37 @@ else
     protected override async Task OnInitializedAsync()
     {
         _tenants = await TenantRepo.ListTenantsAsync();
+
+        _selectedTenant =
+            (!string.IsNullOrEmpty(TenantName) ? TenantName : null) ??
+            AppState.ActiveTenant?.DisplayName ??
+            (_tenants.Count > 0 ? _tenants[0].DisplayName : "");
+
+        AppState.OnChange += OnAppStateChanged;
+
         if (!string.IsNullOrEmpty(TenantName))
-        {
-            _selectedTenant = TenantName;
             await RunPreflightAsync();
-        }
-        else if (_tenants.Count > 0)
+    }
+
+    private async void OnAppStateChanged()
+    {
+        if (AppState.ActiveTenant is not null &&
+            _selectedTenant != AppState.ActiveTenant.DisplayName)
         {
-            _selectedTenant = _tenants[0].DisplayName;
+            _selectedTenant = AppState.ActiveTenant.DisplayName;
+            _result = null;
+            await InvokeAsync(StateHasChanged);
         }
     }
+
+    private void OnTenantChanged(ChangeEventArgs e)
+    {
+        _selectedTenant = e.Value?.ToString() ?? "";
+        AppState.SetActiveTenant(_tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant));
+        _result = null;
+    }
+
+    public void Dispose() => AppState.OnChange -= OnAppStateChanged;
 
     private async Task RunPreflightAsync()
     {

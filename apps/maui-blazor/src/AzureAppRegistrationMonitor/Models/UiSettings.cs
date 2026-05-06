@@ -20,4 +20,10 @@ public class UiSettings
     /// Leave empty to use auto-detection.
     /// </summary>
     public string CliPathOverride { get; set; } = "";
+
+    /// <summary>
+    /// Teams incoming webhook URL for sending secret status notifications.
+    /// Leave empty to disable Teams notifications.
+    /// </summary>
+    public string TeamsWebhookUrl { get; set; } = "";
 }

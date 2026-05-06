@@ -107,7 +107,7 @@ Use `keytar` (Windows Credential Manager) for the npm CLI. Use `Windows.Security
 
 ## OQ-041: Result codes for expired secret findings
 
-**Status:** In Review — awaiting confirmation of suggested codes  
+**Status:** Applied  
 **Owner:** Claude-assisted / Usage Analysis  
 **Related files:**
 - `concept/06_usage_analysis_log_analytics.md`
@@ -130,7 +130,16 @@ Which `ResultType` codes in `AADServicePrincipalSignInLogs` should be mapped to 
 - `7000222` is the most specific code for expired client secret.
 - All non-zero results from a key ID after expiry should be surfaced in the evidence table.
 
-**Next action:** Validate codes in a real tenant → update `references/log-analytics-kql-reference.md` → mark Applied.
+**Answer / Decision:**  
+In Documentation
+- AADSTS7000215	Es wurde ein ungültiger geheimer Clientschlüssel bereitgestellt. Entwicklerfehler: Die App versucht, sich ohne die erforderlichen oder richtigen Authentifizierungsparameter anzumelden.
+-AADSTS700016	UnauthorizedClient_DoesNotMatchRequest: Die Anwendung wurde nicht im Verzeichnis/Mandanten gefunden. Dies kann auftreten, wenn die Anwendung nicht vom Administrator des Mandanten installiert wurde oder wenn sie von den Benutzern des Mandanten keine Zustimmung erhalten hat. Unter Umständen haben Sie den Bezeichnerwert für die Anwendung falsch konfiguriert oder die Authentifizierungsanforderung an den falschen Mandanten gesendet.
+- weitere relevant Codes evtl. hier recherchieren https://learn.microsoft.com/de-de/entra/identity-platform/reference-error-codes
+
+**Impact:**
+- `references/log-analytics-kql-reference.md` — updated with documentation-confirmed codes, AADSTS descriptions and Microsoft error codes reference URL
+
+**Applied note:** `references/log-analytics-kql-reference.md` updated with confirmed codes (AADSTS7000215, AADSTS700016) and Microsoft error codes reference; AADSTS7000222 remains a candidate pending real-tenant validation.
 
 ---
 
@@ -182,3 +191,52 @@ Both capabilities must be included in the MVP preflight shape and UI behavior ta
 - `references/entra-permissions-reference.md` — added Phase 2 Azure RBAC capability candidates
 
 **Applied note:** `concept/03_permissions_and_preflight.md` updated with `canReadAzureResources` and `canReadKeyVaultMetadata` in preflight checks, JSON shape and UI behavior table; `references/entra-permissions-reference.md` updated.
+
+## OQ-045: Should history saving be a dedicated `aarm scan` command or an automatic side-effect of `aarm secrets list`?
+
+**Status:** Applied  
+**Owner:** Claude-assisted / CLI / UI  
+**Related files:**
+- `concept/05_cli_concept.md`
+- `concept/07_maui_blazor_ui_concept.md`
+- `concept/10_implementation_plan.md`
+
+**Question:**  
+Should history saving (persisting scan results to local JSON files) be triggered by a dedicated `aarm scan` command, or should it be an automatic side-effect when `aarm secrets list` is run?
+
+**Answer / Decision:**  
+History saving is an automatic side-effect of `aarm secrets list`. No dedicated `aarm scan` command is needed for MVP.
+
+**Impact:**
+- `concept/05_cli_concept.md` — add a note that `aarm secrets list` automatically persists results to local history storage
+- `concept/07_maui_blazor_ui_concept.md` — confirm that "Run Scan" / "Scan All" UI actions map to `aarm secrets list` and that history is saved automatically as part of that invocation
+
+**Applied note:** `concept/05_cli_concept.md` updated with Automatic History Persistence section; `concept/07_maui_blazor_ui_concept.md` MVP Integration section updated; `references/npm-cli-conventions.md` updated with history persistence convention.
+
+---
+
+## OQ-046: CLI binary bundling mechanism for MAUI release build
+
+**Status:** Applied  
+**Owner:** Claude-assisted / UI / npm  
+**Related files:**
+- `concept/07_maui_blazor_ui_concept.md`
+- `concept/04_npm_library_concept.md`
+- `decisions/ADR-0002-maui-consumes-cli-json.md`
+- `decisions/ADR-0007-cli-bundling-for-maui.md`
+
+**Question:**  
+How exactly is the `aarm` CLI binary bundled into the MAUI app for release builds?
+
+- Is it a raw Node.js binary, a self-contained executable (e.g. `pkg` or `esbuild` bundle), or an npm pack output unpacked into the app folder?
+- Which MAUI build step handles the copy?
+- What is the target path relative to the installed app's `AppContext.BaseDirectory`?
+
+**Answer / Decision:**  
+esbuild bundles the TypeScript CLI to a single `aarm.js` (keytar marked as external). A pre-built `keytar.node` (Windows x64, sourced from the keytar npm package) and a pinned `node.exe` (Node.js LTS) are shipped alongside in a `cli/` subfolder of the install directory. MAUI invokes `cli\node.exe cli\aarm.js [args]`. A MSBuild target handles the copy step at build time. See ADR-0007 for full rationale and layout.
+
+**Impact:**
+- `decisions/ADR-0007-cli-bundling-for-maui.md` — created with full decision, bundle layout and build automation plan
+- `concept/07_maui_blazor_ui_concept.md` — CLI Location Strategy updated with specific bundle layout and invocation pattern
+
+**Applied note:** ADR-0007 created; `concept/07_maui_blazor_ui_concept.md` CLI Location Strategy updated; `ICliLocatorService` now exposes `GetNodePath()` and `GetCliScriptPath()` instead of a single binary path.
