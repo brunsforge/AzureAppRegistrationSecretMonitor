@@ -41,7 +41,8 @@
 @if (_loading)
 {
     <div class="aarm-loading">
-        Scanning… this may take a moment while your browser opens for authentication.
+        Scanning…
+        <ProgressLog Lines="_progressLines" />
     </div>
 }
 else if (_error is not null)
@@ -123,6 +124,7 @@ else
     private string? _error;
     private List<AppRegistrationSummary>? _apps;
     private bool _fromCache;
+    private readonly List<string> _progressLines = new();
 
     private int _expiring30;
     private int _expiring90;
@@ -188,6 +190,8 @@ else
         _loading = true;
         _error = null;
         _fromCache = false;
+        _progressLines.Clear();
+        Cli.ProgressMessage += OnProgress;
         try
         {
             var envelope = await Cli.RunAsync<IReadOnlyList<AppRegistrationSummary>>(
@@ -195,7 +199,6 @@ else
             _apps = envelope?.Data?.ToList() ?? new();
             ComputeStats();
 
-            // Persist to history and update last-scanned setting
             var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
             if (tenant is not null)
                 await HistoryRepo.SaveScanAsync(tenant.TenantId, tenant.DefaultEnvironmentName ?? "default", _apps);
@@ -203,7 +206,18 @@ else
             await SettingsSvc.RecordScanAsync(_selectedTenant);
         }
         catch (Exception ex) { _error = ex.Message; }
-        finally { _loading = false; }
+        finally
+        {
+            Cli.ProgressMessage -= OnProgress;
+            _loading = false;
+        }
+    }
+
+    private void OnProgress(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return;
+        _progressLines.Add(line);
+        InvokeAsync(StateHasChanged);
     }
 
     private void ComputeStats()

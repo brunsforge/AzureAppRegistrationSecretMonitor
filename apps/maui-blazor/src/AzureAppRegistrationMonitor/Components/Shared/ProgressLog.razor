@@ -1,0 +1,117 @@
+@using System.Text.RegularExpressions
+
+@* Renders CLI progress/stderr lines with device-code auth messages enriched:
+   - URLs become clickable buttons (opens system browser via Launcher)
+   - "enter the code XXXXXXXX" gets a clipboard copy icon next to the code *@
+
+@if (Lines.Count > 0)
+{
+    <div style="margin-top:.5rem;font-size:.82rem;font-family:monospace;
+                background:var(--surface-2,#1e1e2e);padding:.5rem .75rem;
+                border-radius:4px;color:var(--text-muted)">
+        @foreach (var line in Lines)
+        {
+            var segments = ParseLine(line);
+            <div style="margin-bottom:.15rem;line-height:1.5">
+                @foreach (var seg in segments)
+                {
+                    @switch (seg.Kind)
+                    {
+                        case SegmentKind.Text:
+                            @seg.Value
+                            break;
+                        case SegmentKind.Url:
+                            <button class="btn btn-link p-0"
+                                    style="font-family:monospace;font-size:.82rem;
+                                           color:#4fc3f7;vertical-align:baseline"
+                                    title="Open in browser"
+                                    @onclick="() => OpenUrlAsync(seg.Value)">
+                                @seg.Value
+                            </button>
+                            break;
+                        case SegmentKind.Code:
+                            <code style="background:var(--surface-3,#313244);
+                                         padding:.1rem .35rem;border-radius:3px;
+                                         color:#cdd6f4;font-size:.88rem">@seg.Value</code>
+                            <button class="btn btn-link p-0 ms-1"
+                                    style="font-size:.78rem;color:var(--text-muted)"
+                                    title="Copy code to clipboard"
+                                    @onclick="() => CopyCodeAsync(seg.Value)">
+                                @(_copiedCode == seg.Value ? "✓ copied" : "📋")
+                            </button>
+                            break;
+                    }
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Lines { get; set; } = Array.Empty<string>();
+
+    private string? _copiedCode;
+
+    private static readonly Regex UrlRegex  = new(@"https://\S+",              RegexOptions.Compiled);
+    private static readonly Regex CodeRegex = new(@"enter the code ([A-Z0-9]+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private enum SegmentKind { Text, Url, Code }
+    private record Segment(SegmentKind Kind, string Value);
+
+    private static List<Segment> ParseLine(string line)
+    {
+        var result  = new List<Segment>();
+        var urlM    = UrlRegex.Match(line);
+        var codeM   = CodeRegex.Match(line);
+
+        // Build an ordered list of interesting spans
+        var spans = new List<(int Start, int Length, SegmentKind Kind, string Value)>();
+
+        if (urlM.Success)
+            spans.Add((urlM.Index, urlM.Length, SegmentKind.Url, urlM.Value));
+
+        if (codeM.Success)
+        {
+            var cg = codeM.Groups[1];
+            spans.Add((cg.Index, cg.Length, SegmentKind.Code, cg.Value));
+        }
+
+        spans = spans.OrderBy(s => s.Start).ToList();
+
+        int pos = 0;
+        foreach (var span in spans)
+        {
+            if (span.Start > pos)
+                result.Add(new Segment(SegmentKind.Text, line[pos..span.Start]));
+            result.Add(new Segment(span.Kind, span.Value));
+            pos = span.Start + span.Length;
+        }
+        if (pos < line.Length)
+            result.Add(new Segment(SegmentKind.Text, line[pos..]));
+
+        if (result.Count == 0)
+            result.Add(new Segment(SegmentKind.Text, line));
+
+        return result;
+    }
+
+    private static async Task OpenUrlAsync(string url)
+    {
+        try { await Launcher.OpenAsync(new Uri(url)); } catch { }
+    }
+
+    private async Task CopyCodeAsync(string code)
+    {
+        try
+        {
+            await Clipboard.SetTextAsync(code);
+            _copiedCode = code;
+            StateHasChanged();
+            await Task.Delay(2000);
+            _copiedCode = null;
+            StateHasChanged();
+        }
+        catch { }
+    }
+}

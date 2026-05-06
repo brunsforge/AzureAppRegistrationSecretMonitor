@@ -25,6 +25,13 @@ public class CliExecutionService
 
     private readonly SettingsService _settings;
 
+    /// <summary>
+    /// Fired for each line written to stderr by the CLI while a command is running.
+    /// Useful for surfacing device-code auth prompts in the UI.
+    /// Subscribers must be thread-safe (invoked from a background thread).
+    /// </summary>
+    public event Action<string>? ProgressMessage;
+
     public CliExecutionService(SettingsService settings)
     {
         _settings = settings;
@@ -71,7 +78,7 @@ public class CliExecutionService
         return list.ToArray();
     }
 
-    private static async Task<(string Stdout, int ExitCode)> ExecuteAsync(string binary, string[] args)
+    private async Task<(string Stdout, int ExitCode)> ExecuteAsync(string binary, string[] args)
     {
         var psi = new ProcessStartInfo
         {
@@ -89,7 +96,12 @@ public class CliExecutionService
         var stderrSb = new StringBuilder();
 
         process.OutputDataReceived += (_, e) => { if (e.Data != null) stdoutSb.AppendLine(e.Data); };
-        process.ErrorDataReceived  += (_, e) => { if (e.Data != null) stderrSb.AppendLine(e.Data); };
+        process.ErrorDataReceived  += (_, e) =>
+        {
+            if (e.Data == null) return;
+            stderrSb.AppendLine(e.Data);
+            ProgressMessage?.Invoke(e.Data);
+        };
 
         process.Start();
         process.BeginOutputReadLine();

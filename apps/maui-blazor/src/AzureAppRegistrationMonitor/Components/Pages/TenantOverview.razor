@@ -1,5 +1,8 @@
 @page "/"
 @inject TenantOverviewViewModel ViewModel
+@inject TenantConfigRepository TenantRepo
+@inject CredentialRepository Credentials
+@inject NotificationService Notify
 @inject AppStateService AppState
 @inject NavigationManager Nav
 @implements IDisposable
@@ -9,10 +12,150 @@
 <div class="aarm-page-header">
     <h1>Tenants</h1>
     <div class="aarm-actions">
-        <button class="btn btn-primary" @onclick="LoadAsync">Refresh</button>
+        <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">+ Add Tenant</button>
+        <button class="btn btn-outline-secondary btn-sm" @onclick="LoadAsync">Refresh</button>
     </div>
 </div>
 
+@* ── Add / Edit form ──────────────────────────────────────────────────── *@
+@if (_showForm)
+{
+    <div class="aarm-form-panel">
+        <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">
+            @(_editingId is null ? "Add Tenant" : "Edit Tenant")
+        </h2>
+
+        @if (_formError is not null)
+        {
+            <div class="aarm-error mb-2" style="font-size:.82rem">@_formError</div>
+        }
+
+        <div class="settings-row">
+            <label>Display name <span class="req">*</span></label>
+            <input class="form-control" style="max-width:280px" @bind="_fDisplayName"
+                   placeholder="e.g. Contoso PROD" />
+        </div>
+        <div class="settings-row">
+            <label>Tenant ID (GUID) <span class="req">*</span></label>
+            <input class="form-control" style="max-width:380px" @bind="_fTenantId"
+                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                   disabled="@(_editingId is not null)" />
+            @if (_editingId is not null)
+            {
+                <small style="color:var(--text-muted)">Tenant ID cannot be changed after creation.</small>
+            }
+        </div>
+        <div class="settings-row">
+            <label>Auth mode <span class="req">*</span></label>
+            <select class="form-select" style="max-width:280px"
+                    value="@_fAuthMode" @onchange="OnAuthModeChanged">
+                <option value="interactive-browser">interactive-browser</option>
+                <option value="device-code">device-code</option>
+                <option value="azure-cli">azure-cli</option>
+                <option value="client-secret">client-secret</option>
+                <option value="username-password">username-password</option>
+            </select>
+        </div>
+
+        @* Auth mode help text *@
+        <div class="aarm-auth-hint">
+            @switch (_fAuthMode)
+            {
+                case "interactive-browser":
+                    <span>The app opens a browser window for sign-in. A <code>http://localhost</code> redirect URI must be registered on the App Registration.</span>
+                    break;
+                case "device-code":
+                    <span>A code appears in the app. Open <code>microsoft.com/devicelogin</code> in any browser and enter the code. No redirect URI needed.</span>
+                    break;
+                case "azure-cli":
+                    <span>Uses your existing <code>az login</code> session. Requires the Azure CLI installed and authenticated. No Client ID or secret needed here.</span>
+                    break;
+                case "client-secret":
+                    <span>Service principal authentication. Client ID and Secret are required. The secret is stored in Windows Credential Manager — never in plain files.</span>
+                    break;
+                case "username-password":
+                    <span>⚠ Does not support MFA — use <strong>device-code</strong> for MFA accounts.<br />
+                    The <strong>Client ID</strong> is an App Registration configured as a <em>Public client</em> (mobile/desktop).
+                    Enable "Allow public client flows" in the App Registration's Authentication settings.
+                    The password is stored in Windows Credential Manager.</span>
+                    break;
+            }
+        </div>
+
+        @* Fields conditional on auth mode *@
+        @if (_fAuthMode != "azure-cli")
+        {
+            <div class="settings-row">
+                <label>Client ID (App Registration GUID) <span class="req">*</span></label>
+                <input class="form-control" style="max-width:380px" @bind="_fClientId"
+                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+            </div>
+        }
+
+        @if (_fAuthMode == "client-secret")
+        {
+            <div class="settings-row">
+                <label>Client Secret <span class="req">*</span></label>
+                <input type="password" class="form-control" style="max-width:380px"
+                       @bind="_fClientSecret"
+                       placeholder="@(_editingId is null ? "Enter secret value" : "Leave blank to keep existing")" />
+                @if (_editingId is not null)
+                {
+                    <small style="color:var(--text-muted)">Leave blank to keep the currently stored secret unchanged.</small>
+                }
+            </div>
+        }
+
+        @if (_fAuthMode == "username-password")
+        {
+            <div class="settings-row">
+                <label>Username (UPN / email) <span class="req">*</span></label>
+                <input class="form-control" style="max-width:320px" @bind="_fUsername"
+                       placeholder="user@contoso.com" />
+            </div>
+            <div class="settings-row">
+                <label>Password <span class="req">*</span></label>
+                <input type="password" class="form-control" style="max-width:380px"
+                       @bind="_fPassword"
+                       placeholder="@(_editingId is null ? "Enter password" : "Leave blank to keep existing")" />
+            </div>
+        }
+
+        <div class="settings-row">
+            <label>Log Analytics Workspace ID</label>
+            <input class="form-control" style="max-width:380px" @bind="_fWorkspaceId"
+                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (optional)" />
+            <small>Required for Usage Analysis. Find it in the Azure Portal → Log Analytics Workspace → Overview.</small>
+        </div>
+
+        <div class="d-flex gap-2 mt-2">
+            <button class="btn btn-primary btn-sm" @onclick="SaveTenantAsync"
+                    disabled="@_saving">
+                @(_saving ? "Saving…" : (_editingId is null ? "Add Tenant" : "Save Changes"))
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="CancelForm">Cancel</button>
+        </div>
+    </div>
+}
+
+@* ── Delete confirmation ──────────────────────────────────────────────── *@
+@if (_confirmDeleteId is not null)
+{
+    var t = ViewModel.Tenants.FirstOrDefault(x => x.TenantId == _confirmDeleteId);
+    <div class="aarm-form-panel" style="border-color:var(--risk-high)">
+        <p style="font-size:.9rem">
+            Delete tenant <strong>@(t?.DisplayName ?? _confirmDeleteId)</strong>?
+            This removes the profile and any stored credentials from Windows Credential Manager.
+        </p>
+        <div class="d-flex gap-2">
+            <button class="btn btn-danger btn-sm" @onclick="ConfirmDeleteAsync">Delete</button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="() => _confirmDeleteId = null">Cancel</button>
+        </div>
+    </div>
+}
+
+@* ── Tenant table ─────────────────────────────────────────────────────── *@
+<div style="margin-top:1.5rem"></div>
 @if (ViewModel.IsLoading)
 {
     <div class="aarm-loading">Loading tenants…</div>
@@ -24,8 +167,8 @@ else if (ViewModel.ErrorMessage is not null)
 else if (!ViewModel.Tenants.Any())
 {
     <div class="aarm-empty">
-        <p>No tenants configured.</p>
-        <p>Run <code>aarm tenants add</code> in a terminal to add your first tenant.</p>
+        <p>No tenants configured yet.</p>
+        <p>Click <strong>+ Add Tenant</strong> above to add your first tenant.</p>
     </div>
 }
 else
@@ -37,18 +180,19 @@ else
                 <th>Tenant ID</th>
                 <th>Auth Mode</th>
                 <th>Preflight</th>
-                <th>Actions</th>
+                <th>Last scan</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
             @foreach (var tenant in ViewModel.Tenants)
             {
                 var preflight = ViewModel.GetPreflight(tenant.TenantId);
-                var running = ViewModel.IsPreflightRunning(tenant.TenantId);
+                var running   = ViewModel.IsPreflightRunning(tenant.TenantId);
 
                 <tr>
                     <td><strong>@tenant.DisplayName</strong></td>
-                    <td><code>@tenant.TenantId</code></td>
+                    <td><code style="font-size:.78rem">@tenant.TenantId</code></td>
                     <td>@tenant.AuthMode</td>
                     <td>
                         @if (running)
@@ -65,21 +209,37 @@ else
                                 <span class="badge bg-warning ms-1">@preflight.MissingPermissions.Count missing</span>
                             }
                         }
+                        else if (tenant.LastPreflightAt is not null)
+                        {
+                            <span class="badge bg-secondary">Cached</span>
+                        }
                         else
                         {
-                            <span class="text-muted">Not checked</span>
+                            <span style="color:var(--text-muted);font-size:.8rem">Not checked</span>
                         }
                     </td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-primary"
+                    <td style="font-size:.78rem;color:var(--text-muted)">
+                        @(tenant.LastSuccessfulScanAt is not null
+                            && DateTimeOffset.TryParse(tenant.LastSuccessfulScanAt, out var dt)
+                            ? dt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")
+                            : "Never")
+                    </td>
+                    <td style="white-space:nowrap">
+                        <button class="btn btn-sm btn-outline-primary me-1"
                                 disabled="@running"
                                 @onclick="() => RunPreflightAsync(tenant)">
                             Preflight
                         </button>
-                        <button class="btn btn-sm btn-outline-secondary ms-1"
+                        <button class="btn btn-sm btn-outline-secondary me-1"
                                 @onclick="() => NavigateToSecrets(tenant)">
-                            Scan Secrets
+                            Scan
                         </button>
+                        <button class="btn btn-sm btn-link p-0 me-2"
+                                title="Edit"
+                                @onclick="() => ShowEditForm(tenant)">✏</button>
+                        <button class="btn btn-sm btn-link p-0 text-danger"
+                                title="Delete"
+                                @onclick="() => _confirmDeleteId = tenant.TenantId">✕</button>
                     </td>
                 </tr>
             }
@@ -88,8 +248,25 @@ else
 }
 
 @code {
-    protected override async Task OnInitializedAsync()
-        => await LoadAsync();
+    // ── Form state ────────────────────────────────────────────────────────────
+    private bool   _showForm;
+    private string? _editingId;
+    private string  _fDisplayName  = "";
+    private string  _fTenantId     = "";
+    private string  _fAuthMode     = "interactive-browser";
+    private string  _fClientId     = "";
+    private string  _fClientSecret = "";
+    private string  _fUsername     = "";
+    private string  _fPassword     = "";
+    private string  _fWorkspaceId  = "";
+    private string? _formError;
+    private bool    _saving;
+
+    // ── Delete confirmation ───────────────────────────────────────────────────
+    private string? _confirmDeleteId;
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
@@ -97,6 +274,139 @@ else
         StateHasChanged();
     }
 
+    // ── Form: show / hide ─────────────────────────────────────────────────────
+    private void ShowAddForm()
+    {
+        ResetForm();
+        _editingId  = null;
+        _showForm   = true;
+    }
+
+    private void ShowEditForm(TenantProfile t)
+    {
+        _editingId      = t.TenantId;
+        _fDisplayName   = t.DisplayName;
+        _fTenantId      = t.TenantId;
+        _fAuthMode      = t.AuthMode;
+        _fClientId      = t.ClientId ?? "";
+        _fUsername      = t.Username ?? "";
+        _fWorkspaceId   = t.LogAnalyticsWorkspaceId ?? "";
+        _fClientSecret  = "";   // never pre-fill a credential field
+        _fPassword      = "";
+        _formError      = null;
+        _showForm       = true;
+        _confirmDeleteId = null;
+    }
+
+    private void CancelForm()
+    {
+        _showForm  = false;
+        _formError = null;
+    }
+
+    private void OnAuthModeChanged(ChangeEventArgs e)
+    {
+        _fAuthMode = e.Value?.ToString() ?? "interactive-browser";
+        if (_fAuthMode == "azure-cli") _fClientId = "";
+    }
+
+    // ── Save ──────────────────────────────────────────────────────────────────
+    private async Task SaveTenantAsync()
+    {
+        _formError = null;
+
+        // Validation
+        if (string.IsNullOrWhiteSpace(_fDisplayName))  { _formError = "Display name is required."; return; }
+        if (string.IsNullOrWhiteSpace(_fTenantId))     { _formError = "Tenant ID is required."; return; }
+        if (_fAuthMode != "azure-cli" && string.IsNullOrWhiteSpace(_fClientId))
+            { _formError = "Client ID is required for this auth mode."; return; }
+        if (_fAuthMode == "client-secret" && _editingId is null && string.IsNullOrWhiteSpace(_fClientSecret))
+            { _formError = "Client Secret is required."; return; }
+        if (_fAuthMode == "username-password")
+        {
+            if (string.IsNullOrWhiteSpace(_fUsername))  { _formError = "Username is required."; return; }
+            if (_editingId is null && string.IsNullOrWhiteSpace(_fPassword))
+                { _formError = "Password is required."; return; }
+        }
+
+        _saving = true;
+        try
+        {
+            var now = DateTimeOffset.UtcNow.ToString("O");
+            var existing = _editingId is not null
+                ? await TenantRepo.GetTenantAsync(_editingId)
+                : null;
+
+            var profile = new TenantProfile(
+                TenantId:                    _fTenantId.Trim(),
+                DisplayName:                 _fDisplayName.Trim(),
+                AuthMode:                    _fAuthMode,
+                ClientId:                    _fAuthMode != "azure-cli" ? _fClientId.Trim() : null,
+                Username:                    _fAuthMode == "username-password" ? _fUsername.Trim() : null,
+                DefaultEnvironmentName:      existing?.DefaultEnvironmentName ?? "default",
+                LogAnalyticsWorkspaceId:     string.IsNullOrWhiteSpace(_fWorkspaceId) ? null : _fWorkspaceId.Trim(),
+                CreatedAt:                   existing?.CreatedAt ?? now,
+                UpdatedAt:                   now,
+                LastPreflightAt:             existing?.LastPreflightAt,
+                LastSuccessfulScanAt:        existing?.LastSuccessfulScanAt
+            );
+
+            await TenantRepo.UpsertTenantAsync(profile);
+
+            // Store credentials in Windows Credential Manager
+            if (_fAuthMode == "client-secret" && !string.IsNullOrWhiteSpace(_fClientSecret))
+                Credentials.SetClientSecret(profile.TenantId, profile.ClientId!, _fClientSecret);
+
+            if (_fAuthMode == "username-password" && !string.IsNullOrWhiteSpace(_fPassword))
+                Credentials.SetUserPassword(profile.TenantId, profile.ClientId!, profile.Username!, _fPassword);
+
+            Notify.Show(
+                _editingId is null ? "Tenant added" : "Tenant updated",
+                $"\"{profile.DisplayName}\" saved successfully.");
+
+            AppState.SetActiveTenant(profile);
+            _showForm = false;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_confirmDeleteId is null) return;
+
+        var tenant = ViewModel.Tenants.FirstOrDefault(t => t.TenantId == _confirmDeleteId);
+        if (tenant is not null)
+        {
+            // Remove stored credentials
+            if (tenant.ClientId is not null)
+            {
+                Credentials.DeleteClientSecret(tenant.TenantId, tenant.ClientId);
+                if (tenant.Username is not null)
+                    Credentials.DeleteUserPassword(tenant.TenantId, tenant.ClientId, tenant.Username);
+            }
+
+            await TenantRepo.DeleteTenantAsync(tenant.TenantId);
+
+            if (AppState.ActiveTenant?.TenantId == tenant.TenantId)
+                AppState.SetActiveTenant(null);
+
+            Notify.Show("Tenant removed", $"\"{tenant.DisplayName}\" has been deleted.");
+        }
+
+        _confirmDeleteId = null;
+        await LoadAsync();
+    }
+
+    // ── Navigation with AppState ──────────────────────────────────────────────
     private async Task RunPreflightAsync(TenantProfile tenant)
     {
         AppState.SetActiveTenant(tenant);
@@ -107,6 +417,19 @@ else
     {
         AppState.SetActiveTenant(tenant);
         Nav.NavigateTo($"/secrets/{Uri.EscapeDataString(tenant.DisplayName)}");
+    }
+
+    private void ResetForm()
+    {
+        _fDisplayName   = "";
+        _fTenantId      = "";
+        _fAuthMode      = "interactive-browser";
+        _fClientId      = "";
+        _fClientSecret  = "";
+        _fUsername      = "";
+        _fPassword      = "";
+        _fWorkspaceId   = "";
+        _formError      = null;
     }
 
     public void Dispose() { }

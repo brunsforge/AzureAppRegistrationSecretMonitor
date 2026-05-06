@@ -5,8 +5,10 @@ import {
   DeviceCodeCredential,
   InteractiveBrowserCredential,
   UsernamePasswordCredential,
+  useIdentityPlugin,
   type TokenCredential,
 } from '@azure/identity';
+import { cachePersistencePlugin } from '@azure/identity-cache-persistence';
 import { AuthError } from '../errors/index.js';
 import type { AuthMode } from './AuthMode.js';
 
@@ -71,6 +73,13 @@ export type AuthConfig =
   | AzureCliAuthConfig
   | UsernamePasswordAuthConfig;
 
+// Register the cache-persistence plugin once (idempotent).
+// Enables persistent token caching for interactive-browser and device-code modes
+// so the user does not need to re-authenticate on every CLI invocation.
+try { useIdentityPlugin(cachePersistencePlugin); } catch { /* unavailable in some environments */ }
+
+const TOKEN_CACHE_OPTIONS = { enabled: true };
+
 export function createCredential(config: AuthConfig): TokenCredential {
   switch (config.mode) {
     case 'client-secret':
@@ -83,12 +92,17 @@ export function createCredential(config: AuthConfig): TokenCredential {
       return new DeviceCodeCredential({
         tenantId: config.tenantId,
         clientId: config.clientId,
+        tokenCachePersistenceOptions: TOKEN_CACHE_OPTIONS,
+        // Write to stderr so that --output json stdout stays clean for machine consumers
+        // and MAUI can surface the code/URL via the ProgressMessage event.
+        userPromptCallback: (info) => process.stderr.write(info.message + '\n'),
       });
     case 'interactive-browser':
       return new InteractiveBrowserCredential({
         tenantId: config.tenantId,
         clientId: config.clientId,
         redirectUri: config.redirectUri ?? 'http://localhost',
+        tokenCachePersistenceOptions: TOKEN_CACHE_OPTIONS,
       });
     case 'certificate':
       return new ClientCertificateCredential(

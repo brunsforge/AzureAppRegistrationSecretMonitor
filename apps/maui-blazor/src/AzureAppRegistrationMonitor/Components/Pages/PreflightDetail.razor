@@ -28,7 +28,10 @@
 
 @if (_loading)
 {
-    <div class="aarm-loading">Running capability checks…</div>
+    <div class="aarm-loading">
+        Running capability checks…
+        <ProgressLog Lines="_progressLines" />
+    </div>
 }
 else if (_error is not null)
 {
@@ -119,6 +122,7 @@ else
     private bool _loading;
     private string? _error;
     private PreflightResult? _result;
+    private readonly List<string> _progressLines = new();
 
     private static int TotalCapabilities => 12;
     private int GetEnabledCount() => _result is null ? 0 : GetCapabilities().Count(c => c.Value);
@@ -163,13 +167,26 @@ else
         if (string.IsNullOrEmpty(_selectedTenant)) return;
         _loading = true;
         _error = null;
+        _progressLines.Clear();
+        Cli.ProgressMessage += OnProgress;
         try
         {
             var envelope = await Cli.RunAsync<PreflightResult>(_selectedTenant, "preflight", "run");
             _result = envelope?.Data;
         }
         catch (Exception ex) { _error = ex.Message; }
-        finally { _loading = false; }
+        finally
+        {
+            Cli.ProgressMessage -= OnProgress;
+            _loading = false;
+        }
+    }
+
+    private void OnProgress(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return;
+        _progressLines.Add(line);
+        InvokeAsync(StateHasChanged);
     }
 
     private IEnumerable<KeyValuePair<string, bool>> GetCapabilities()

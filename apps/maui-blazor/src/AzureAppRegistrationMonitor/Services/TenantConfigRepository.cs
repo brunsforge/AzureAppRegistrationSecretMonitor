@@ -64,6 +64,24 @@ public class TenantConfigRepository
         await SaveAllAsync(tenants);
     }
 
+    public async Task<bool> DeleteTenantAsync(string tenantId)
+    {
+        var tenants = (await ListTenantsAsync()).ToList();
+        var removed = tenants.RemoveAll(t => t.TenantId == tenantId);
+        if (removed == 0) return false;
+        await SaveAllAsync(tenants);
+        return true;
+    }
+
+    public async Task UpsertTenantAsync(TenantProfile profile)
+    {
+        var tenants = (await ListTenantsAsync()).ToList();
+        var idx = tenants.FindIndex(t => t.TenantId == profile.TenantId);
+        if (idx >= 0) tenants[idx] = profile;
+        else          tenants.Add(profile);
+        await SaveAllAsync(tenants);
+    }
+
     private async Task SaveAllAsync(IEnumerable<TenantProfile> tenants)
     {
         Directory.CreateDirectory(_configDir);

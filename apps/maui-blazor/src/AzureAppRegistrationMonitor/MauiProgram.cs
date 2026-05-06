@@ -34,6 +34,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<SettingsService>();
         builder.Services.AddSingleton<SystemTrayService>();
         builder.Services.AddSingleton<TeamsNotificationService>();
+        builder.Services.AddSingleton<CredentialRepository>();
+        builder.Services.AddSingleton<NotificationService>();
 
         // View models
         builder.Services.AddTransient<TenantOverviewViewModel>();
