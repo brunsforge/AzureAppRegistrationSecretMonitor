@@ -129,8 +129,14 @@ public class CliExecutionService
     /// </summary>
     private (string Binary, string? Script) FindBinary()
     {
-        // 1. Bundled alongside the MAUI executable (production deployment)
+        // 1a. Bundled cli/ subfolder (ADR-0007): node.exe + aarm.mjs alongside the MAUI exe
         var appDir = Path.GetDirectoryName(Environment.ProcessPath) ?? ".";
+        var bundledNode   = Path.Combine(appDir, "cli", "node.exe");
+        var bundledScript = Path.Combine(appDir, "cli", "aarm.mjs");
+        if (File.Exists(bundledNode) && File.Exists(bundledScript))
+            return (bundledNode, bundledScript);
+
+        // 1b. Native aarm binary alongside the MAUI executable
         foreach (var name in new[] { "aarm.cmd", "aarm.exe" })
         {
             var p = Path.Combine(appDir, name);

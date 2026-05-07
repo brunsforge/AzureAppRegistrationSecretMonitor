@@ -5,8 +5,8 @@ await build({
   bundle: true,
   platform: 'node',
   target: 'node20',
-  outfile: 'dist/aarm.js',
+  outfile: 'dist/aarm.mjs',
   external: ['keytar'],
   banner: { js: '#!/usr/bin/env node' },
-  format: 'cjs',
+  format: 'esm',
 });

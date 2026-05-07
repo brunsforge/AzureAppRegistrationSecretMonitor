@@ -22,6 +22,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:bundle": "node esbuild.config.mjs",
     "dev": "node --import tsx/esm src/index.ts"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.21.0",
     "typescript": "^5.5.0"
   }
 }

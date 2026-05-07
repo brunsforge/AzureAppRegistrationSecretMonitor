@@ -46,9 +46,14 @@ TestResults/
 [Tt]est[Rr]esult*/
 *.trx
 
-# Publish profiles that contain local paths or passwords
+# Publish profiles and launch settings that contain local paths
 **/Properties/PublishProfiles/
+**/Properties/launchSettings.json
 *.pubxml.user
+
+# Local development overrides (may contain local paths or debug settings)
+appsettings.Development.json
+appsettings.*.local.json
 
 # Windows App SDK packaging
 **/AppPackages/
@@ -80,6 +85,11 @@ _pkginfo.txt
 .azure/
 msal_token_cache.json
 msal_token_cache.json.bin
+
+# @azure/identity-cache-persistence token cache files
+msal.cache
+*.msal.cache
+*.msal.cache.bin
 
 # aarm local config — lives in ~/.aarm, but guard against accidental copies
 tenants.json
