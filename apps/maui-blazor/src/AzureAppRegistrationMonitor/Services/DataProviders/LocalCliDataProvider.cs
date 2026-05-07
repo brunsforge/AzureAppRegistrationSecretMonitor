@@ -45,6 +45,9 @@ public class LocalCliDataProvider : IDataProvider
         return _cli.RunAsync<PreflightResult>(tenantId, args);
     }
 
+    // Local Mode: scan happens on GetSecretsAsync — no separate trigger needed.
+    public Task<bool> TriggerScanAsync(string tenantId) => Task.FromResult(true);
+
     private static string[] WithEnv(string[] baseArgs, string? env) =>
         env is null ? baseArgs : [.. baseArgs, "--env", env];
 }

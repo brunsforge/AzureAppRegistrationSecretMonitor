@@ -23,6 +23,14 @@
     </div>
 </div>
 
+@* ── Cloud scan message ───────────────────────────────────────────────── *@
+@if (_scanMessage is not null)
+{
+    <div class="alert py-2 mb-2" style="font-size:.82rem;background:var(--surface-alt,#1e293b);border:1px solid var(--border)">
+        @_scanMessage
+    </div>
+}
+
 @* ── Cloud Mode banner ────────────────────────────────────────────────── *@
 @if (_isCloudMode)
 {
@@ -246,17 +254,17 @@ else
                             : "Never")
                     </td>
                     <td style="white-space:nowrap">
-                        <button class="btn btn-sm btn-outline-primary me-1"
-                                disabled="@running"
-                                @onclick="() => RunPreflightAsync(tenant)">
-                            Preflight
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary me-1"
-                                @onclick="() => NavigateToSecrets(tenant)">
-                            Scan
-                        </button>
                         @if (!_isCloudMode)
                         {
+                            <button class="btn btn-sm btn-outline-primary me-1"
+                                    disabled="@running"
+                                    @onclick="() => RunPreflightAsync(tenant)">
+                                Preflight
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary me-1"
+                                    @onclick="() => NavigateToSecrets(tenant)">
+                                Scan
+                            </button>
                             <button class="btn btn-sm btn-link p-0 me-2"
                                     title="Edit"
                                     @onclick="() => ShowEditForm(tenant)">✏</button>
@@ -266,6 +274,19 @@ else
                         }
                         else
                         {
+                            @* Cloud Mode: trigger server-side scan + view results *@
+                            var isTriggeringThis = _triggeringTenantId == tenant.TenantId;
+                            <button class="btn btn-sm btn-outline-primary me-1"
+                                    disabled="@isTriggeringThis"
+                                    title="Trigger scan on the Azure Function (sends Teams notifications per job config)"
+                                    @onclick="() => TriggerCloudScanAsync(tenant)">
+                                @(isTriggeringThis ? "Triggering…" : "↻ Scan")
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary me-1"
+                                    @onclick="() => NavigateToSecrets(tenant)"
+                                    title="View latest scan results">
+                                View
+                            </button>
                             <a href="https://portal.azure.com" target="_blank" rel="noopener"
                                class="btn btn-sm btn-link p-0" title="Manage in Azure Portal">↗</a>
                         }
@@ -294,7 +315,9 @@ else
     // ── Delete confirmation ───────────────────────────────────────────────────
     private string? _confirmDeleteId;
 
-    private bool _isCloudMode;
+    private bool    _isCloudMode;
+    private string? _triggeringTenantId;
+    private string? _scanMessage;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
@@ -461,6 +484,29 @@ else
     {
         AppState.SetActiveTenant(tenant);
         Nav.NavigateTo($"/secrets/{Uri.EscapeDataString(tenant.DisplayName)}");
+    }
+
+    private async Task TriggerCloudScanAsync(TenantProfile tenant)
+    {
+        _triggeringTenantId = tenant.TenantId;
+        _scanMessage = null;
+        StateHasChanged();
+        try
+        {
+            var accepted = await DataProvider.TriggerScanAsync(tenant.TenantId);
+            _scanMessage = accepted
+                ? $"✓ Scan triggered for \"{tenant.DisplayName}\". Results and Teams notifications arrive shortly."
+                : $"✗ Scan trigger rejected for \"{tenant.DisplayName}\".";
+        }
+        catch (Exception ex)
+        {
+            _scanMessage = $"✗ {ex.Message}";
+        }
+        finally
+        {
+            _triggeringTenantId = null;
+            StateHasChanged();
+        }
     }
 
     private void ResetForm()

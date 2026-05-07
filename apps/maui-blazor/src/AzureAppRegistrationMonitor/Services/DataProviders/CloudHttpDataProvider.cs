@@ -35,7 +35,6 @@ public class CloudHttpDataProvider : IDataProvider
         var response = await _http.GetAsync("tenants");
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();
-        // Unknown fields (e.g. "environments") are silently ignored by System.Text.Json.
         return JsonSerializer.Deserialize<List<TenantProfile>>(json, JsonOptions)
                ?? new List<TenantProfile>();
     }
@@ -53,18 +52,16 @@ public class CloudHttpDataProvider : IDataProvider
 
     public async Task<ResultEnvelope<List<AppRegistrationSummary>>?> GetAppsAsync(
         string tenantId, string? environmentName = null)
-    {
-        var env = environmentName ?? "default";
-        return await GetAsync<List<AppRegistrationSummary>>(
-            $"tenants/{tenantId}/environments/{env}/secrets");
-    }
+        => await GetAsync<List<AppRegistrationSummary>>($"tenants/{tenantId}/secrets");
 
     public async Task<ResultEnvelope<PreflightResult>?> GetPreflightAsync(
         string tenantId, string? environmentName = null)
+        => await GetAsync<PreflightResult>($"tenants/{tenantId}/preflight");
+
+    public async Task<bool> TriggerScanAsync(string tenantId)
     {
-        var env = environmentName ?? "default";
-        return await GetAsync<PreflightResult>(
-            $"tenants/{tenantId}/environments/{env}/preflight");
+        var response = await _http.PostAsync($"tenants/{tenantId}/scan", null);
+        return response.StatusCode == System.Net.HttpStatusCode.Accepted;
     }
 
     private async Task<ResultEnvelope<T>?> GetAsync<T>(string relativeUrl)

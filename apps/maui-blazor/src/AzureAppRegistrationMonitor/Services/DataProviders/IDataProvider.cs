@@ -22,4 +22,12 @@ public interface IDataProvider
 
     Task<ResultEnvelope<PreflightResult>?> GetPreflightAsync(
         string tenantId, string? environmentName = null);
+
+    /// <summary>
+    /// Cloud Mode: triggers an immediate scan on the server (POST /api/tenants/{id}/scan).
+    /// Teams notifications are sent by the server according to the job configuration.
+    /// Local Mode: no-op — scanning happens when GetSecretsAsync is called.
+    /// Returns true if the trigger was accepted or the no-op succeeded.
+    /// </summary>
+    Task<bool> TriggerScanAsync(string tenantId);
 }

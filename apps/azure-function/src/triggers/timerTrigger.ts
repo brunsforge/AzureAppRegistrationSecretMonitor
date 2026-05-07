@@ -3,12 +3,8 @@ import type { InvocationContext, Timer } from '@azure/functions';
 import { getJobConfigStore, getResultStore, getRuntimeStateStore } from '../storage/stores.js';
 import { selectQualifyingJobs } from '../scan/JobScheduler.js';
 import { executeJob } from '../scan/JobExecutor.js';
-import { TemplateLoader } from '../notifications/TemplateLoader.js';
-import { renderTemplate } from '../notifications/NotificationRenderer.js';
-import { postToTeams } from '../notifications/TeamsNotifier.js';
-import { evaluateThresholds } from '../notifications/ThresholdEvaluator.js';
+import { evaluateThresholds, sendSuccessNotifications, sendErrorNotification } from '../notifications/notifyJob.js';
 import type { JobRuntimeState } from '../types/RuntimeState.js';
-import type { JobConfig } from '../types/JobConfig.js';
 
 app.timer('aarmScheduleTrigger', {
   schedule: '0 */5 * * * *',
@@ -19,7 +15,6 @@ async function scheduleTriggerHandler(_timer: Timer, context: InvocationContext)
   const jobStore = getJobConfigStore();
   const resultStore = getResultStore();
   const runtimeStore = getRuntimeStateStore();
-  const templateLoader = new TemplateLoader(jobStore);
 
   const { jobs } = await jobStore.readJobs();
   context.log(`Timer tick: ${jobs.length} job(s) configured`);
@@ -55,7 +50,7 @@ async function scheduleTriggerHandler(_timer: Timer, context: InvocationContext)
         ]);
 
         context.log(`Job ${job.id} OK — ${thresholds.secretCount} secrets, ${thresholds.criticalCount} critical`);
-        await sendSuccessNotifications(job, thresholds, started, templateLoader, context);
+        await sendSuccessNotifications(job, thresholds, started, context);
 
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -66,80 +61,8 @@ async function scheduleTriggerHandler(_timer: Timer, context: InvocationContext)
           lastRunStatus: 'failed',
           lastRunSecretsFound: null,
         });
-        await sendErrorNotification(job, msg, started, templateLoader, context);
+        await sendErrorNotification(job, msg, started, context);
       }
     }),
   );
-}
-
-async function sendSuccessNotifications(
-  job: JobConfig,
-  thresholds: ReturnType<typeof evaluateThresholds>,
-  scanTimestamp: string,
-  loader: TemplateLoader,
-  context: InvocationContext,
-): Promise<void> {
-  const dashboardUrl = process.env['AARM_DASHBOARD_URL'] ?? '';
-  const base = {
-    tenantDisplayName: job.tenantDisplayName,
-    environmentName: job.environmentName,
-    scanTimestamp,
-    secretCount: String(thresholds.secretCount),
-    expiringCount: String(thresholds.expiringCount),
-    criticalCount: String(thresholds.criticalCount),
-    dashboardUrl,
-  };
-
-  const tasks: Promise<void>[] = [];
-
-  if (job.teamsWebhooks?.alerts) {
-    const webhook = job.teamsWebhooks.alerts;
-    if (thresholds.hasCritical) {
-      tasks.push(notify(loader, 'critical', job.notificationTemplates?.critical, base, webhook, context));
-    } else if (thresholds.hasExpiring) {
-      tasks.push(notify(loader, 'expiring', job.notificationTemplates?.expiring, base, webhook, context));
-    }
-  }
-
-  if (job.teamsWebhooks?.status) {
-    tasks.push(notify(loader, 'summary', job.notificationTemplates?.summary, base, job.teamsWebhooks.status, context));
-  }
-
-  await Promise.allSettled(tasks);
-}
-
-async function sendErrorNotification(
-  job: JobConfig,
-  errorMessage: string,
-  timestamp: string,
-  loader: TemplateLoader,
-  context: InvocationContext,
-): Promise<void> {
-  if (!job.teamsWebhooks?.errors) return;
-  const dashboardUrl = process.env['AARM_DASHBOARD_URL'] ?? '';
-  await notify(
-    loader,
-    'error',
-    job.notificationTemplates?.error,
-    { tenantDisplayName: job.tenantDisplayName, environmentName: job.environmentName, errorMessage, timestamp, dashboardUrl },
-    job.teamsWebhooks.errors,
-    context,
-  );
-}
-
-async function notify(
-  loader: TemplateLoader,
-  key: Parameters<typeof loader.load>[0],
-  customBlob: string | null | undefined,
-  context: Record<string, string>,
-  webhookUrl: string,
-  invCtx: InvocationContext,
-): Promise<void> {
-  try {
-    const template = await loader.load(key, customBlob);
-    const payload = renderTemplate(template, context as never);
-    await postToTeams(webhookUrl, payload);
-  } catch (err) {
-    invCtx.warn(`Teams notification (${key}) failed: ${err}`);
-  }
 }

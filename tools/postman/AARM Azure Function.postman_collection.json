@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "aarm-azure-function-collection",
     "name": "AARM Azure Function",
-    "description": "Azure App Registration Monitor — API collection for the AARM Azure Function.\n\nAuthentication: All requests use the Function Key header `x-functions-key: {{functionKey}}`.\nSet `baseUrl` and `functionKey` in the AARM Dev environment before running requests.\n\nFor AAD token auth (if Easy Auth is configured on the Function App):\n1. Fill in `aadTenantId`, `aadClientId`, `aadClientSecret` in the environment.\n2. Run the **Get AAD Token** request — the access token is stored in `accessToken` automatically.\n3. Switch collection auth to Bearer Token using `{{accessToken}}`.",
+    "description": "Azure App Registration Monitor â€” API collection for the AARM Azure Function.\n\nAuthentication: All requests use the Function Key header `x-functions-key: {{functionKey}}`.\nSet `baseUrl` and `functionKey` in the AARM Dev environment before running requests.\n\nFor AAD token auth (if Easy Auth is configured on the Function App):\n1. Fill in `aadTenantId`, `aadClientId`, `aadClientSecret` in the environment.\n2. Run the **Get AAD Token** request â€” the access token is stored in `accessToken` automatically.\n3. Switch collection auth to Bearer Token using `{{accessToken}}`.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -16,7 +16,7 @@
   "item": [
     {
       "name": "Auth",
-      "description": "Token acquisition for Azure AD authentication (optional — use if the Function App has Easy Auth / Azure AD authentication configured in addition to Function Keys).",
+      "description": "Token acquisition for Azure AD authentication (optional â€” use if the Function App has Easy Auth / Azure AD authentication configured in addition to Function Keys).",
       "item": [
         {
           "name": "Get AAD Token (client credentials)",
@@ -113,7 +113,7 @@
                   "    pm.expect(data).to.be.an('array');",
                   "});",
                   "// Auto-set tenantId and envName from first result if not already set.",
-                  "// envName = defaultEnvironmentName (MAUI has no environment selector —",
+                  "// envName = defaultEnvironmentName (MAUI has no environment selector â€”",
                   "// environments are an internal routing detail of the function).",
                   "var data = pm.response.json();",
                   "if (data.length > 0 && !pm.environment.get('tenantId')) {",
@@ -132,7 +132,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "tenants"]
             },
-            "description": "Returns all configured tenants as TenantProfile objects — one entry per unique tenantId. Includes display name, auth mode, last scan timestamp, and defaultEnvironmentName.\n\nNote: MAUI has no environment selector. `defaultEnvironmentName` is used transparently when calling the scan endpoints. The `/environments/{envName}/` path in scan routes is an internal routing detail of the function.\n\nThe post-response script auto-sets `tenantId` and `envName` from the first result."
+            "description": "Returns all configured tenants as TenantProfile objects â€” one entry per unique tenantId. Includes display name, auth mode, last scan timestamp, and defaultEnvironmentName.\n\nNote: MAUI has no environment selector. `defaultEnvironmentName` is used transparently when calling the scan endpoints. The `/environments/{envName}/` path in scan routes is an internal routing detail of the function.\n\nThe post-response script auto-sets `tenantId` and `envName` from the first result."
           }
         }
       ]
@@ -166,11 +166,11 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/environments/{{envName}}/secrets",
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/secrets",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "tenants", "{{tenantId}}", "environments", "{{envName}}", "secrets"]
+              "path": ["api", "tenants", "{{tenantId}}", "secrets"]
             },
-            "description": "Returns the latest secret scan as `ResultEnvelope<AppRegistrationSummary[]>` — the full nested structure (per app with nested secrets).\n\nMAUI `CloudHttpDataProvider` flattens this to `SecretSummary[]` for the Secret List page and uses it as-is for the Dashboard.\n\n404 if no scan has run yet for this tenant/environment."
+            "description": "Returns the latest secret scan as `ResultEnvelope<AppRegistrationSummary[]>` â€” the full nested structure (per app with nested secrets).\n\nMAUI `CloudHttpDataProvider` flattens this to `SecretSummary[]` for the Secret List page and uses it as-is for the Dashboard.\n\n404 if no scan has run yet for this tenant/environment."
           }
         }
       ]
@@ -203,9 +203,9 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/environments/{{envName}}/preflight",
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/preflight",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "tenants", "{{tenantId}}", "environments", "{{envName}}", "preflight"]
+              "path": ["api", "tenants", "{{tenantId}}", "preflight"]
             },
             "description": "Returns the latest preflight capability check result.\n\n404 if no preflight has run yet."
           }
@@ -236,9 +236,9 @@
             "method": "POST",
             "body": { "mode": "raw", "raw": "" },
             "url": {
-              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/environments/{{envName}}/scan",
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/scan",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "tenants", "{{tenantId}}", "environments", "{{envName}}", "scan"]
+              "path": ["api", "tenants", "{{tenantId}}", "scan"]
             },
             "description": "Triggers an immediate scan outside the regular schedule. Returns 202 Accepted immediately; the scan runs asynchronously in the background.\n\nCheck the `/secrets` endpoint after a few seconds to see updated results.\n\n404 if no job is configured for this tenant/environment combination."
           }
@@ -276,7 +276,7 @@
                 { "key": "env",    "value": "{{envName}}",  "disabled": true }
               ]
             },
-            "description": "Returns a self-contained interactive HTML page. Data is loaded client-side via fetch() from the JSON endpoints.\n\nAuth level: anonymous (Function Key stored in browser localStorage).\n\nOptional query params: `tenant`, `env` — pre-select a tenant/environment on load."
+            "description": "Returns a self-contained interactive HTML page. Data is loaded client-side via fetch() from the JSON endpoints.\n\nAuth level: anonymous (Function Key stored in browser localStorage).\n\nOptional query params: `tenant`, `env` â€” pre-select a tenant/environment on load."
           }
         },
         {
@@ -306,7 +306,7 @@
                 { "key": "env",    "value": "{{envName}}" }
               ]
             },
-            "description": "Returns a fully server-side rendered HTML snapshot. No JavaScript — all data embedded at request time.\n\nUse cases: email attachments, archiving, SharePoint embedding, CI pipeline reports."
+            "description": "Returns a fully server-side rendered HTML snapshot. No JavaScript â€” all data embedded at request time.\n\nUse cases: email attachments, archiving, SharePoint embedding, CI pipeline reports."
           }
         }
       ]
@@ -314,3 +314,4 @@
   ],
   "variable": []
 }
+

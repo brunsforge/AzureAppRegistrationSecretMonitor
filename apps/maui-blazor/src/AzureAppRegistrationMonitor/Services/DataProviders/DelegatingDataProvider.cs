@@ -43,6 +43,9 @@ public class DelegatingDataProvider : IDataProvider
         string tenantId, string? environmentName = null)
         => _inner.GetPreflightAsync(tenantId, environmentName);
 
+    public Task<bool> TriggerScanAsync(string tenantId)
+        => _inner.TriggerScanAsync(tenantId);
+
     private void OnInnerProgress(string msg) => ProgressMessage?.Invoke(msg);
     private void WireEvents() => _inner.ProgressMessage += OnInnerProgress;
 }
