@@ -1,16 +1,34 @@
 {
   "_comment": [
-    "AARM Azure Function — central job configuration file. Upload to: aarm-config/jobs.json",
-    "credentialRef must match an App Setting name in the Azure Function app.",
-    "The App Setting value must be a Key Vault reference:",
-    "  AARM_SECRET_CONTOSO_PROD = @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/<name>/)",
-    "Naming convention: AARM_SECRET_ + job id in UPPER_SNAKE_CASE.",
-    "For workload-identity-federation jobs, omit credentialRef entirely."
+    "AARM Azure Function — central job configuration file.",
+    "Deploy to: Storage Account → Container 'aarm-config' → Blob 'jobs.json'",
+    "",
+    "CREDENTIAL SETUP (per job that uses client-secret or certificate authMode):",
+    "  1. Create the client secret value as a secret in Azure Key Vault.",
+    "     Example: az keyvault secret set --vault-name <vault> --name aarm-contoso-prod --value <secret>",
+    "  2. Add a Function App Setting referencing the Key Vault secret:",
+    "     Name:  AARM_SECRET_CONTOSO_PROD",
+    "     Value: @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/aarm-contoso-prod/)",
+    "     CLI:   az functionapp config appsettings set --name <fn> --resource-group <rg>",
+    "              --settings 'AARM_SECRET_CONTOSO_PROD=@Microsoft.KeyVault(SecretUri=...)'",
+    "  3. Set credentialRef in the job to the App Setting name: 'AARM_SECRET_CONTOSO_PROD'",
+    "  4. The Azure Functions runtime resolves the Key Vault reference automatically.",
+    "     Application code reads: process.env['AARM_SECRET_CONTOSO_PROD']",
+    "",
+    "NAMING CONVENTION for App Settings:",
+    "  AARM_SECRET_ + JOB_ID in UPPER_SNAKE_CASE",
+    "  job id 'contoso-prod' → AARM_SECRET_CONTOSO_PROD",
+    "  job id 'fabrikam-dev' → AARM_SECRET_FABRIKAM_DEV"
   ],
   "version": "1.0",
   "jobs": [
     {
-      "_comment": "Daily scan of Contoso production tenant with full webhook and custom critical template.",
+      "_comment": [
+        "Contoso PROD — daily scan at 06:00 UTC.",
+        "Uses a custom critical template stored in aarm-config/templates/critical-contoso.json.",
+        "App Setting required: AARM_SECRET_CONTOSO_PROD",
+        "  Value: @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/aarm-contoso-prod/)"
+      ],
 
       "id": "contoso-prod",
       "enabled": true,
@@ -36,7 +54,7 @@
 
       "notificationTemplates": {
         "expiring":  null,
-        "critical":  "custom-critical-contoso.json",
+        "critical":  "critical-contoso.json",
         "summary":   null,
         "error":     null
       },
@@ -52,7 +70,13 @@
       }
     },
     {
-      "_comment": "Weekly scan of Fabrikam development tenant with minimal notification setup.",
+      "_comment": [
+        "Fabrikam DEV — weekly scan on Monday at 08:00 UTC.",
+        "Uses a custom summary template stored in aarm-config/templates/summary-fabrikam.json.",
+        "Error-only webhooks — no status or alert notifications.",
+        "App Setting required: AARM_SECRET_FABRIKAM_DEV",
+        "  Value: @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/aarm-fabrikam-dev/)"
+      ],
 
       "id": "fabrikam-dev",
       "enabled": true,
@@ -79,7 +103,7 @@
       "notificationTemplates": {
         "expiring":  null,
         "critical":  null,
-        "summary":   null,
+        "summary":   "summary-fabrikam.json",
         "error":     null
       },
 

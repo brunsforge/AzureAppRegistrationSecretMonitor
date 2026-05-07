@@ -1,9 +1,11 @@
 import {
   AzureCliCredential,
+  ClientAssertionCredential,
   ClientCertificateCredential,
   ClientSecretCredential,
   DeviceCodeCredential,
   InteractiveBrowserCredential,
+  ManagedIdentityCredential,
   UsernamePasswordCredential,
   useIdentityPlugin,
   type TokenCredential,
@@ -65,13 +67,26 @@ export interface UsernamePasswordAuthConfig {
   password: string;
 }
 
+/**
+ * Credential-free cross-tenant access via OIDC Workload Identity Federation.
+ * The runtime's Managed Identity (UAMI via AZURE_CLIENT_ID) issues an OIDC token
+ * that the target tenant trusts as a federated credential.
+ * Only valid in Azure-hosted environments with a configured UAMI.
+ */
+export interface WorkloadIdentityFederationAuthConfig {
+  mode: 'workload-identity-federation';
+  tenantId: string;
+  clientId: string;
+}
+
 export type AuthConfig =
   | ClientSecretAuthConfig
   | DeviceCodeAuthConfig
   | InteractiveBrowserAuthConfig
   | CertificateAuthConfig
   | AzureCliAuthConfig
-  | UsernamePasswordAuthConfig;
+  | UsernamePasswordAuthConfig
+  | WorkloadIdentityFederationAuthConfig;
 
 // Register the cache-persistence plugin once (idempotent).
 // Enables persistent token caching for interactive-browser and device-code modes
@@ -112,6 +127,20 @@ export function createCredential(config: AuthConfig): TokenCredential {
       );
     case 'azure-cli':
       return new AzureCliCredential({ tenantId: config.tenantId });
+    case 'workload-identity-federation': {
+      const uamiClientId = process.env['AZURE_CLIENT_ID'];
+      const msiCred = new ManagedIdentityCredential(
+        uamiClientId ? { clientId: uamiClientId } : {},
+      );
+      return new ClientAssertionCredential(
+        config.tenantId,
+        config.clientId,
+        async () => {
+          const token = await msiCred.getToken('api://AzureADTokenExchange');
+          return token.token;
+        },
+      );
+    }
     case 'username-password':
       return new UsernamePasswordCredential(
         config.tenantId,

@@ -297,13 +297,50 @@ can be changed on the Settings page without restarting the app.
 
 `IDataProvider` is the abstraction registered in the DI container.
 
-- `LocalCliDataProvider` — current implementation (spawns CLI child process)
-- `CloudHttpDataProvider` — HTTP calls to Azure Function endpoints
-
-The active implementation is resolved based on `AppMode` at startup. Mode switches during
-the session use a factory/strategy pattern to swap the registered instance.
+- `LocalCliDataProvider` — wraps `CliExecutionService`; forwards `ProgressMessage` events
+- `CloudHttpDataProvider` — HTTP calls to Azure Function endpoints with Function Key auth
+- `DelegatingDataProvider` — singleton proxy registered as `IDataProvider`; call `SetProvider()` to hot-swap without restart
 
 See `concept/12_azure_function_cloud_mode.md` for the Azure Function contract.
+
+### Settings Page — Cloud Mode specification
+
+The Settings page is divided into two sections: **Connection** (editable) and **Diagnostics** (read-only).
+
+#### Connection section
+
+| Field | Control | Behaviour |
+|---|---|---|
+| Mode | Radio buttons: Local / Cloud | Calls `DelegatingDataProvider.SetProvider()` on change; persisted to `UiSettings.AppMode` |
+| Function base URI | Text input | Visible only when Mode = Cloud; persisted to `UiSettings.CloudBaseUri` |
+| Function key | Password input + Save button | Visible only when Mode = Cloud; saved to Windows Credential Manager via `CredentialRepository.SetCloudFunctionKey()` |
+| Test connection | Button | Visible only when Mode = Cloud; calls `/api/status`, shows latency + enabled job count |
+
+Switching from Cloud to Local immediately swaps the provider. The CLI path override and Teams webhook fields remain visible at all times.
+
+#### Diagnostics section (read-only)
+
+Shown below the connection fields. Content changes based on active mode.
+
+**Local Mode:**
+
+| Label | Value source |
+|---|---|
+| Config directory | Resolved absolute path of `~/.aarm/` (or `AARM_CONFIG_DIR`) |
+| History directory | `{configDir}/history/` |
+| Tenant profiles file | `{configDir}/tenants.json` |
+| MSAL cache file | `{configDir}/msal.cache` |
+| History file count | `Directory.GetFiles(historyDir, "*.json", SearchOption.AllDirectories).Length` |
+
+**Cloud Mode:**
+
+| Label | Value source |
+|---|---|
+| Function URI | `UiSettings.CloudBaseUri` |
+| Connection status | Last test result: OK / Error + timestamp |
+| Enabled jobs | `jobCount` from `/api/status` response |
+
+The Diagnostics section updates automatically when the mode is switched or when "Test connection" succeeds.
 
 ## App Startup Initialization
 

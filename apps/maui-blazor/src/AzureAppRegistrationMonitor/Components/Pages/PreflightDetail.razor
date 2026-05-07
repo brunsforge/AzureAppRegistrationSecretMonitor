@@ -1,6 +1,7 @@
 @page "/preflight"
 @page "/preflight/{TenantName}"
-@inject CliExecutionService Cli
+@using AzureAppRegistrationMonitor.Services.DataProviders
+@inject IDataProvider DataProvider
 @inject TenantConfigRepository TenantRepo
 @inject AppStateService AppState
 @implements IDisposable
@@ -168,16 +169,19 @@ else
         _loading = true;
         _error = null;
         _progressLines.Clear();
-        Cli.ProgressMessage += OnProgress;
+        DataProvider.ProgressMessage += OnProgress;
         try
         {
-            var envelope = await Cli.RunAsync<PreflightResult>(_selectedTenant, "preflight", "run");
+            var tenant = _tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant);
+            var envelope = await DataProvider.GetPreflightAsync(
+                tenant?.TenantId ?? _selectedTenant,
+                tenant?.DefaultEnvironmentName);
             _result = envelope?.Data;
         }
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
-            Cli.ProgressMessage -= OnProgress;
+            DataProvider.ProgressMessage -= OnProgress;
             _loading = false;
         }
     }

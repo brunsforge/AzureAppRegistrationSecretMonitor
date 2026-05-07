@@ -7,6 +7,7 @@ export type {
   DeviceCodeAuthConfig,
   InteractiveBrowserAuthConfig,
   UsernamePasswordAuthConfig,
+  WorkloadIdentityFederationAuthConfig,
 } from './auth/AuthProviderFactory.js';
 export { createCredential } from './auth/AuthProviderFactory.js';
 

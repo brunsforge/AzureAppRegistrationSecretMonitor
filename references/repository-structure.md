@@ -14,6 +14,7 @@ AzureAppRegistrationSecretMonitor/
     examples/         ← example configs and templates (not deployed; reference only)
   prompts/
   scripts/            ← local publish and build automation scripts
+  infra/              ← Bicep templates for Azure infrastructure (Function App, Storage, Key Vault, AI)
   .claude/
     commands/
     skills/

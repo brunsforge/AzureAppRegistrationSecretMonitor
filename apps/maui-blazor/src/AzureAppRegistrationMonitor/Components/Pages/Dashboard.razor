@@ -1,5 +1,6 @@
 @page "/dashboard"
-@inject CliExecutionService Cli
+@using AzureAppRegistrationMonitor.Services.DataProviders
+@inject IDataProvider DataProvider
 @inject TenantConfigRepository TenantRepo
 @inject HistoryRepository HistoryRepo
 @inject SettingsService SettingsSvc
@@ -191,15 +192,16 @@ else
         _error = null;
         _fromCache = false;
         _progressLines.Clear();
-        Cli.ProgressMessage += OnProgress;
+        DataProvider.ProgressMessage += OnProgress;
         try
         {
-            var envelope = await Cli.RunAsync<IReadOnlyList<AppRegistrationSummary>>(
-                _selectedTenant, "apps", "list");
+            var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
+            var envelope = await DataProvider.GetAppsAsync(
+                tenant?.TenantId ?? _selectedTenant,
+                tenant?.DefaultEnvironmentName);
             _apps = envelope?.Data?.ToList() ?? new();
             ComputeStats();
 
-            var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
             if (tenant is not null)
                 await HistoryRepo.SaveScanAsync(tenant.TenantId, tenant.DefaultEnvironmentName ?? "default", _apps);
 
@@ -208,7 +210,7 @@ else
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
-            Cli.ProgressMessage -= OnProgress;
+            DataProvider.ProgressMessage -= OnProgress;
             _loading = false;
         }
     }

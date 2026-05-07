@@ -1,7 +1,12 @@
 @page "/settings"
+@using AzureAppRegistrationMonitor.Services.DataProviders
+@using System.Text.Json
 @inject TenantConfigRepository TenantRepo
 @inject SettingsService SettingsSvc
 @inject TeamsNotificationService Teams
+@inject DelegatingDataProvider DataProviderProxy
+@inject CredentialRepository CredRepo
+@inject LocalCliDataProvider LocalProvider
 
 <PageTitle>Settings — AARM</PageTitle>
 
@@ -13,6 +18,104 @@
 {
     <div class="alert alert-success py-2 mb-3" style="font-size:.85rem">Settings saved.</div>
 }
+
+<!-- ── Data Source (Cloud / Local mode) ─────────────────────────────────── -->
+<section class="settings-section">
+    <h2>Data Source</h2>
+    <p class="text-muted" style="font-size:.8rem">
+        Local mode uses the bundled CLI. Cloud mode fetches data from your AARM Azure Function.
+    </p>
+
+    <div class="settings-row">
+        <label>Mode</label>
+        <div class="d-flex gap-3">
+            <label class="d-flex align-items-center gap-1" style="cursor:pointer">
+                <input type="radio" name="appMode" value="local"
+                       checked="@(SettingsSvc.Settings.AppMode == "local")"
+                       @onchange="SelectLocalMode" />
+                Local (CLI)
+            </label>
+            <label class="d-flex align-items-center gap-1" style="cursor:pointer">
+                <input type="radio" name="appMode" value="cloud"
+                       checked="@(SettingsSvc.Settings.AppMode == "cloud")"
+                       @onchange="SelectCloudMode" />
+                Cloud (Azure Function)
+            </label>
+        </div>
+    </div>
+
+    @if (SettingsSvc.Settings.AppMode == "cloud")
+    {
+        <div class="settings-row">
+            <label>Function base URI</label>
+            <input class="form-control" style="max-width:480px"
+                   placeholder="https://aarm-fn.azurewebsites.net"
+                   @bind="SettingsSvc.Settings.CloudBaseUri" />
+            <small>Base URL of the AARM Azure Function app.</small>
+        </div>
+
+        <div class="settings-row">
+            <label>Function key</label>
+            <div class="d-flex gap-2" style="max-width:480px">
+                <input type="password" class="form-control"
+                       placeholder="Paste function key…"
+                       @bind="_cloudFunctionKeyInput" />
+                <button class="btn btn-outline-secondary btn-sm"
+                        @onclick="SaveFunctionKeyAsync">Save key</button>
+            </div>
+            <small>Stored in Windows Credential Manager — never in plain files.</small>
+        </div>
+
+        <div class="d-flex gap-2 mt-2 align-items-center">
+            <button class="btn btn-outline-secondary btn-sm"
+                    @onclick="TestConnectionAsync"
+                    disabled="@_testingConnection">
+                @(_testingConnection ? "Testing…" : "Test connection")
+            </button>
+            @if (_connectionResult is not null)
+            {
+                <span style="font-size:.85rem;color:@(_connectionOk ? "var(--color-ok)" : "var(--color-error)")">
+                    @_connectionResult
+                </span>
+            }
+        </div>
+    }
+
+    <button class="btn btn-primary btn-sm mt-3" @onclick="SaveAsync">Save data source settings</button>
+</section>
+
+<!-- ── Diagnostics (read-only) ──────────────────────────────────────────── -->
+<section class="settings-section">
+    <h2>Diagnostics</h2>
+
+    @if (SettingsSvc.Settings.AppMode != "cloud")
+    {
+        <table style="font-size:.8rem;border-collapse:collapse;width:100%">
+            <tr><td style="padding:.25rem .5rem;color:var(--text-muted);width:200px">Config directory</td>
+                <td><code>@_configDir</code></td></tr>
+            <tr><td style="padding:.25rem .5rem;color:var(--text-muted)">History directory</td>
+                <td><code>@Path.Combine(_configDir, "history")</code></td></tr>
+            <tr><td style="padding:.25rem .5rem;color:var(--text-muted)">Tenant profiles file</td>
+                <td><code>@Path.Combine(_configDir, "tenants.json")</code></td></tr>
+            <tr><td style="padding:.25rem .5rem;color:var(--text-muted)">MSAL cache file</td>
+                <td><code>@Path.Combine(_configDir, "msal.cache")</code></td></tr>
+            <tr><td style="padding:.25rem .5rem;color:var(--text-muted)">History file count</td>
+                <td>@_historyFileCount file(s)</td></tr>
+        </table>
+    }
+    else
+    {
+        <table style="font-size:.8rem;border-collapse:collapse;width:100%">
+            <tr><td style="padding:.25rem .5rem;color:var(--text-muted);width:200px">Function URI</td>
+                <td><code>@(SettingsSvc.Settings.CloudBaseUri is { Length: > 0 } u ? u : "—")</code></td></tr>
+            <tr><td style="padding:.25rem .5rem;color:var(--text-muted)">Connection status</td>
+                <td style="color:@(_connectionOk ? "var(--color-ok)" : "var(--text-muted)")">
+                    @(_connectionResult ?? "Not tested yet")</td></tr>
+            <tr><td style="padding:.25rem .5rem;color:var(--text-muted)">Enabled jobs</td>
+                <td>@(_enabledJobCount?.ToString() ?? "—")</td></tr>
+        </table>
+    }
+</section>
 
 <!-- ── UI Preferences ────────────────────────────────────────────────────── -->
 <section class="settings-section">
@@ -168,9 +271,106 @@
     private string? _teamsTestResult;
     private bool _teamsTestOk;
 
+    // ── Cloud Mode ─────────────────────────────────────────────────────────────
+    private string _cloudFunctionKeyInput = "";
+    private bool _testingConnection;
+    private string? _connectionResult;
+    private bool _connectionOk;
+    private int? _enabledJobCount;
+
+    // ── Diagnostics ────────────────────────────────────────────────────────────
+    private string _configDir = "";
+    private int _historyFileCount;
+
     protected override async Task OnInitializedAsync()
     {
         _tenants = (await TenantRepo.ListTenantsAsync()).ToList();
+        _configDir = Path.Combine(
+            Environment.GetEnvironmentVariable("AARM_CONFIG_DIR") ??
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".aarm");
+        var historyDir = Path.Combine(_configDir, "history");
+        _historyFileCount = Directory.Exists(historyDir)
+            ? Directory.GetFiles(historyDir, "*.json", SearchOption.AllDirectories).Length
+            : 0;
+    }
+
+    private Task SelectLocalMode(ChangeEventArgs _) => OnModeChanged("local");
+    private Task SelectCloudMode(ChangeEventArgs _) => OnModeChanged("cloud");
+
+    private async Task OnModeChanged(string mode)
+    {
+        SettingsSvc.Settings.AppMode = mode;
+        await SettingsSvc.SaveAsync();
+
+        if (mode == "cloud")
+        {
+            var uri = SettingsSvc.Settings.CloudBaseUri;
+            var key = CredRepo.GetCloudFunctionKey() ?? "";
+            if (!string.IsNullOrEmpty(uri) && !string.IsNullOrEmpty(key))
+                DataProviderProxy.SetProvider(new CloudHttpDataProvider(uri, key));
+        }
+        else
+        {
+            DataProviderProxy.SetProvider(LocalProvider);
+        }
+        StateHasChanged();
+    }
+
+    private async Task SaveFunctionKeyAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_cloudFunctionKeyInput))
+        {
+            CredRepo.SetCloudFunctionKey(_cloudFunctionKeyInput);
+            _cloudFunctionKeyInput = "";
+            _saved = true;
+            await Task.Delay(1500);
+            _saved = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        var uri = SettingsSvc.Settings.CloudBaseUri;
+        var key = CredRepo.GetCloudFunctionKey() ?? "";
+        if (string.IsNullOrEmpty(uri)) { _connectionResult = "✗ Function URI not set."; _connectionOk = false; return; }
+        if (string.IsNullOrEmpty(key)) { _connectionResult = "✗ Function key not saved."; _connectionOk = false; return; }
+
+        _testingConnection = true;
+        _connectionResult = null;
+        StateHasChanged();
+        try
+        {
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            http.DefaultRequestHeaders.Add("x-functions-key", key);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var resp = await http.GetAsync(uri.TrimEnd('/') + "/api/status");
+            sw.Stop();
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                _enabledJobCount = doc.RootElement.TryGetProperty("enabledJobCount", out var el) ? el.GetInt32() : null;
+                _connectionResult = $"✓ OK — {sw.ElapsedMilliseconds}ms, {_enabledJobCount} job(s) enabled";
+                _connectionOk = true;
+            }
+            else
+            {
+                _connectionResult = $"✗ HTTP {(int)resp.StatusCode}";
+                _connectionOk = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _connectionResult = $"✗ {ex.Message}";
+            _connectionOk = false;
+        }
+        finally
+        {
+            _testingConnection = false;
+            StateHasChanged();
+        }
     }
 
     private async Task SaveAsync()

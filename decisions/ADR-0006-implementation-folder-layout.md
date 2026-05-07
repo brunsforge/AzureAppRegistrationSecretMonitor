@@ -19,13 +19,16 @@ Use a `packages/` + `apps/` monorepo layout within the existing repository:
 
 ```text
 packages/
-  core/          ← npm library (@brunsforge/azure-app-registration-monitor)
-  cli/           ← CLI entry point (aarm binary)
+  core/             ← npm library (@brunsforge/azure-app-registration-monitor)
+  cli/              ← CLI entry point (aarm binary)
 apps/
-  maui-blazor/   ← .NET MAUI Blazor desktop application
+  maui-blazor/      ← .NET MAUI Blazor desktop application
+  azure-function/   ← Azure Functions v4 cloud scanning engine (Phase 9)
 ```
 
-The `packages/` directory uses npm workspaces.
+The `packages/` directory uses npm workspaces. `apps/azure-function/` is also included
+in the npm workspace so it can reference `packages/core` via the workspace protocol.
+`apps/maui-blazor/` is a .NET solution and is not part of the npm workspace.
 
 ## Rationale
 

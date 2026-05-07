@@ -2,7 +2,8 @@
   "name": "azure-app-registration-monitor",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/azure-function"
   ],
   "engines": {
     "node": ">=18"

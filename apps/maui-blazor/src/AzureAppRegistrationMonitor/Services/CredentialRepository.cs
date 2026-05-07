@@ -39,6 +39,19 @@ public class CredentialRepository
     public void DeleteUserPassword(string tenantId, string clientId, string username) =>
         Delete(UserAccount(tenantId, clientId, username));
 
+    // ── Cloud Function Key ────────────────────────────────────────────────────
+
+    private const string CloudFunctionKeyAccount = "cloud-function-key";
+
+    public void SetCloudFunctionKey(string key) =>
+        Write(CloudFunctionKeyAccount, key);
+
+    public string? GetCloudFunctionKey() =>
+        Read(CloudFunctionKeyAccount);
+
+    public void DeleteCloudFunctionKey() =>
+        Delete(CloudFunctionKeyAccount);
+
     // ── Key helpers (must match CredentialStore.ts) ───────────────────────────
 
     private static string ClientAccount(string t, string c)          => $"{t}:{c}";

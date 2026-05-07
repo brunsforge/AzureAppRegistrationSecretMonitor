@@ -26,4 +26,15 @@ public class UiSettings
     /// Leave empty to disable Teams notifications.
     /// </summary>
     public string TeamsWebhookUrl { get; set; } = "";
+
+    // ── Cloud Mode ────────────────────────────────────────────────────────────
+
+    /// <summary>"local" uses the bundled CLI; "cloud" calls the Azure Function endpoints.</summary>
+    public string AppMode { get; set; } = "local";
+
+    /// <summary>Base URI of the AARM Azure Function app, e.g. https://aarm-fn.azurewebsites.net</summary>
+    public string CloudBaseUri { get; set; } = "";
+
+    // CloudFunctionKey is stored in Windows Credential Manager (not here) under
+    // target name "aarm/cloud-function-key".
 }

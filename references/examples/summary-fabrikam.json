@@ -1,0 +1,56 @@
+{
+  "_comment": "Custom Teams Adaptive Card template for regular scan summary notifications.",
+  "_placeholders": [
+    "{{tenantDisplayName}}  - tenant display name from job config",
+    "{{environmentName}}    - environment slug from job config",
+    "{{scanTimestamp}}      - ISO 8601 scan completion timestamp",
+    "{{secretCount}}        - total secrets scanned",
+    "{{expiringCount}}      - secrets expiring within expiringWithinDays",
+    "{{criticalCount}}      - secrets expiring within criticalWithinDays",
+    "{{dashboardUrl}}       - base URL of the Azure Function HTML dashboard"
+  ],
+
+  "type": "message",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "contentUrl": null,
+      "content": {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+          {
+            "type": "TextBlock",
+            "text": "Weekly Secret Scan — Fabrikam DEV",
+            "weight": "bolder",
+            "size": "medium"
+          },
+          {
+            "type": "TextBlock",
+            "text": "{{tenantDisplayName}} / {{environmentName}}",
+            "spacing": "none",
+            "isSubtle": true
+          },
+          {
+            "type": "FactSet",
+            "spacing": "medium",
+            "facts": [
+              { "title": "Total secrets", "value": "{{secretCount}}" },
+              { "title": "Expiring soon", "value": "{{expiringCount}}" },
+              { "title": "Critical", "value": "{{criticalCount}}" },
+              { "title": "Scanned at (UTC)", "value": "{{scanTimestamp}}" }
+            ]
+          }
+        ],
+        "actions": [
+          {
+            "type": "Action.OpenUrl",
+            "title": "Open Dashboard",
+            "url": "{{dashboardUrl}}"
+          }
+        ]
+      }
+    }
+  ]
+}

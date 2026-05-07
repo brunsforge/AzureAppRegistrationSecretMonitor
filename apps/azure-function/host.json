@@ -1,0 +1,31 @@
+{
+  "version": "2.0",
+  "logging": {
+    "logLevel": {
+      "default":            "Information",
+      "Function":           "Debug",
+      "Host.Results":       "Information",
+      "Host.Aggregator":    "Trace",
+      "Host.Startup":       "Information"
+    },
+    "applicationInsights": {
+      "samplingSettings": {
+        "isEnabled": true,
+        "maxTelemetryItemsPerSecond": 20,
+        "evaluationInterval": "01:00:00",
+        "initialSamplingPercentage": 100,
+        "excludedTypes": "Exception;Trace;Request"
+      },
+      "enableLiveMetrics": true,
+      "enableDependencyTracking": true,
+      "enablePerformanceCountersCollection": false
+    }
+  },
+  "extensionBundle": {
+    "id": "Microsoft.Azure.Functions.ExtensionBundle",
+    "version": "[4.*, 5.0.0)"
+  },
+  "concurrency": {
+    "maximumFunctionConcurrency": 4
+  }
+}

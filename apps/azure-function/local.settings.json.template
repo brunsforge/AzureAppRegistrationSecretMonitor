@@ -1,0 +1,19 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "FUNCTIONS_EXTENSION_VERSION": "~4",
+
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+
+    "AZURE_CLIENT_ID": "",
+
+    "AARM_STORAGE_URI": "https://<account>.blob.core.windows.net",
+    "AARM_DASHBOARD_URL": "http://localhost:7071/api/dashboard",
+
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": "",
+    "APPLICATIONINSIGHTS_ROLE_NAME": "aarm-azure-function",
+
+    "AARM_SECRET_CONTOSO_PROD": "<client-secret-value-for-local-dev-only>"
+  }
+}

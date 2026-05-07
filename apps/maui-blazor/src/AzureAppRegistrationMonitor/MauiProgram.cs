@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using AzureAppRegistrationMonitor.Services;
+using AzureAppRegistrationMonitor.Services.DataProviders;
 using AzureAppRegistrationMonitor.ViewModels;
 
 namespace AzureAppRegistrationMonitor;
@@ -29,6 +30,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<AppStateService>();
         builder.Services.AddSingleton<AppInitializationService>();
         builder.Services.AddSingleton<CliExecutionService>();
+        builder.Services.AddSingleton<LocalCliDataProvider>();
+        builder.Services.AddSingleton<DelegatingDataProvider>();
+        builder.Services.AddSingleton<IDataProvider>(sp => sp.GetRequiredService<DelegatingDataProvider>());
         builder.Services.AddSingleton<TenantConfigRepository>();
         builder.Services.AddSingleton<HistoryRepository>();
         builder.Services.AddSingleton<SettingsService>();

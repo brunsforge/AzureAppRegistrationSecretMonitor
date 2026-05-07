@@ -60,11 +60,33 @@ See OQ-053 for the `cachePersistencePlugin` placement concern.
 | Attribute | Value |
 |---|---|
 | Runtime | Node.js 20 LTS |
-| Plan | Consumption (MVP) or Flex Consumption for always-warm |
+| Plan | **Flex Consumption** (recommended) or standard Consumption |
 | OS | Linux |
 | Authentication to function | Function Key (API key) for MVP; Azure AD later |
 | Identity | **User-Assigned Managed Identity (UAMI)** — see below |
-| Storage | Azure Blob Storage (same account as function for MVP) |
+| Storage | Azure Blob Storage in the same account as the function runtime |
+
+#### Flex Consumption Plan
+
+Flex Consumption (GA 2024) is the recommended hosting plan because:
+- Configurable `alwaysReadyCount` eliminates cold starts for the timer trigger
+- Native VNet integration (no Premium plan needed)
+- Pay-per-use like standard Consumption but with predictable warm instances
+
+**Critical difference from standard Consumption:** Flex Consumption requires UAMI-based
+storage authentication for `AzureWebJobsStorage`. The connection string pattern changes:
+
+| Setting | Standard Consumption | Flex Consumption |
+|---|---|---|
+| `AzureWebJobsStorage` | full connection string with AccountKey | omit or use `UseDevelopmentStorage=true` locally |
+| `AzureWebJobsStorage__accountName` | not needed | `<storage-account-name>` |
+| `AZURE_CLIENT_ID` | optional | required — used for both UAMI auth and WJS storage |
+
+This aligns perfectly with the UAMI architecture: `AZURE_CLIENT_ID` is already required for
+scanning credentials and is reused for `AzureWebJobsStorage` authentication automatically.
+
+For local development, Azurite (`UseDevelopmentStorage=true`) is used for `AzureWebJobsStorage`
+while `AARM_STORAGE_URI` still points to a real Azure Storage account (or Azurite).
 
 ### Identity: User-Assigned Managed Identity (UAMI)
 
