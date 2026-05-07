@@ -11,7 +11,9 @@ AzureAppRegistrationSecretMonitor/
   concept/
   decisions/
   references/
+    examples/         ← example configs and templates (not deployed; reference only)
   prompts/
+  scripts/            ← local publish and build automation scripts
   .claude/
     commands/
     skills/

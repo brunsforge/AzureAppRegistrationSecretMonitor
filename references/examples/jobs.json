@@ -1,0 +1,97 @@
+{
+  "_comment": [
+    "AARM Azure Function — central job configuration file. Upload to: aarm-config/jobs.json",
+    "credentialRef must match an App Setting name in the Azure Function app.",
+    "The App Setting value must be a Key Vault reference:",
+    "  AARM_SECRET_CONTOSO_PROD = @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/<name>/)",
+    "Naming convention: AARM_SECRET_ + job id in UPPER_SNAKE_CASE.",
+    "For workload-identity-federation jobs, omit credentialRef entirely."
+  ],
+  "version": "1.0",
+  "jobs": [
+    {
+      "_comment": "Daily scan of Contoso production tenant with full webhook and custom critical template.",
+
+      "id": "contoso-prod",
+      "enabled": true,
+
+      "tenantId": "<contoso-tenant-id>",
+      "tenantDisplayName": "Contoso Corporation",
+      "environmentName": "PROD",
+
+      "authMode": "client-secret",
+      "clientId": "<app-registration-client-id-in-contoso-tenant>",
+      "credentialRef": "AARM_SECRET_CONTOSO_PROD",
+
+      "schedule": {
+        "intervalDays": 1,
+        "runAtUtc": "06:00"
+      },
+
+      "teamsWebhooks": {
+        "status":  "<teams-incoming-webhook-url-for-daily-summary>",
+        "alerts":  "<teams-incoming-webhook-url-for-expiring-and-critical-alerts>",
+        "errors":  "<teams-incoming-webhook-url-for-scan-errors>"
+      },
+
+      "notificationTemplates": {
+        "expiring":  null,
+        "critical":  "custom-critical-contoso.json",
+        "summary":   null,
+        "error":     null
+      },
+
+      "notificationThresholds": {
+        "expiringWithinDays": 30,
+        "criticalWithinDays": 7
+      },
+
+      "logAnalytics": {
+        "workspaceId": "<log-analytics-workspace-id>",
+        "enabled": true
+      }
+    },
+    {
+      "_comment": "Weekly scan of Fabrikam development tenant with minimal notification setup.",
+
+      "id": "fabrikam-dev",
+      "enabled": true,
+
+      "tenantId": "<fabrikam-tenant-id>",
+      "tenantDisplayName": "Fabrikam Inc.",
+      "environmentName": "DEV",
+
+      "authMode": "client-secret",
+      "clientId": "<app-registration-client-id-in-fabrikam-tenant>",
+      "credentialRef": "AARM_SECRET_FABRIKAM_DEV",
+
+      "schedule": {
+        "intervalDays": 7,
+        "runAtUtc": "08:00"
+      },
+
+      "teamsWebhooks": {
+        "status":  null,
+        "alerts":  null,
+        "errors":  "<teams-incoming-webhook-url-for-scan-errors>"
+      },
+
+      "notificationTemplates": {
+        "expiring":  null,
+        "critical":  null,
+        "summary":   null,
+        "error":     null
+      },
+
+      "notificationThresholds": {
+        "expiringWithinDays": 14,
+        "criticalWithinDays": 3
+      },
+
+      "logAnalytics": {
+        "workspaceId": null,
+        "enabled": false
+      }
+    }
+  ]
+}

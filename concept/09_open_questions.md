@@ -240,3 +240,210 @@ esbuild bundles the TypeScript CLI to a single `aarm.js` (keytar marked as exter
 - `concept/07_maui_blazor_ui_concept.md` — CLI Location Strategy updated with specific bundle layout and invocation pattern
 
 **Applied note:** ADR-0007 created; `concept/07_maui_blazor_ui_concept.md` CLI Location Strategy updated; `ICliLocatorService` now exposes `GetNodePath()` and `GetCliScriptPath()` instead of a single binary path.
+
+---
+
+## Azure Function / Cloud Mode
+
+## OQ-047: Workload Identity Federation as a scanning auth mode
+
+**Status:** Applied
+**Owner:** npm / Security
+**Related files:**
+- `concept/04_npm_library_concept.md`
+- `concept/12_azure_function_cloud_mode.md`
+
+**Question:**
+The Azure Function always scans *external* tenants (not its own host tenant in the typical case).
+Managed Identity alone cannot grant cross-tenant Graph access without cooperation from
+the target tenant.
+
+Workload Identity Federation (OIDC) allows credential-free cross-tenant access if the target
+tenant admin configures a federated credential trust on their App Registration.
+
+Should the npm library expose a `workload-identity-federation` auth mode backed by
+`OnBehalfOfCredential` / OIDC exchange, to support the case where target tenants have
+performed the one-time federation setup?
+
+If yes: this enables zero-stored-credential scanning for tenants that opt in.
+If no: all external tenant jobs always use `client-secret` or `certificate`.
+
+**Answer / Decision:**
+Yes! prefered method is workload-identify-federation. client secret and certificate should be also possible for cloud mode.
+
+**Impact:**
+- `concept/04_npm_library_concept.md` — auth mode table
+- `concept/12_azure_function_cloud_mode.md` — job config auth modes
+- `AuthProviderFactory.ts` in packages/core
+
+**Next action:** Decide. For MVP Azure Function: `client-secret` + Key Vault is sufficient.
+Workload Identity Federation is a post-MVP option for tenants that want zero stored credentials.
+
+---
+
+## OQ-048: Separate vs shared Azure Storage Account for Azure Function
+
+**Status:** Applied
+**Owner:** Implementation / Security
+**Related files:**
+- `concept/12_azure_function_cloud_mode.md`
+
+**Question:**
+Should the Azure Function use a dedicated storage account for AARM data (`aarm-config`,
+`aarm-data` containers), or the same storage account that Azure Functions runtime uses
+for its own state (`AzureWebJobsStorage`)?
+
+**Considerations:**
+- Same account: simpler, fewer resources, fine for MVP
+- Separate account: independent lifecycle, independent RBAC, cleaner for multi-team use
+
+**Answer / Decision:**
+for MVP everything under a main workload container in azure functions own storage.
+
+**Impact:**
+- `concept/12_azure_function_cloud_mode.md` — storage layout section
+
+**Next action:** Decide and apply. Recommend: same account for MVP, separate for production.
+
+---
+
+## OQ-049: Client Secret storage for multi-tenant Azure Function jobs
+
+**Status:** Applied
+**Owner:** Security
+**Related files:**
+- `concept/12_azure_function_cloud_mode.md`
+- `concept/03_permissions_and_preflight.md`
+
+**Question:**
+Job configurations in the Azure Function may use `client-secret` auth mode for tenants
+where the function's Managed Identity cannot be granted access (e.g. external tenants).
+Where are these client secrets stored?
+
+**Options:**
+1. Azure Key Vault — secrets referenced by name in job config JSON
+2. Azure App Configuration with Key Vault references
+3. Function App Settings (environment variables) — not recommended for multiple tenants
+
+**Answer / Decision:**
+I guess environment variables with references to a key vault secret is the common way? They should share a prefix for sorting.
+
+**Impact:**
+- `concept/12_azure_function_cloud_mode.md` — job configuration schema
+- `concept/03_permissions_and_preflight.md`
+
+**Next action:** Decide and apply.
+
+---
+
+## OQ-050: HTML Dashboard rendering approach for Azure Function endpoint
+
+**Status:** Applied
+**Owner:** npm / UI
+**Related files:**
+- `concept/12_azure_function_cloud_mode.md`
+
+**Question:**
+The `/api/dashboard` endpoint returns a self-contained HTML page. Two approaches:
+
+1. **Server-side render once** — function generates full HTML from latest data at request time
+2. **Static shell + client-side fetch** — function serves a fixed HTML/JS shell; JS fetches JSON endpoints on load and on tenant switch
+
+Approach 2 is more responsive and reusable (same JSON endpoints used by MAUI and by the browser).
+Approach 1 is simpler but stale between requests.
+
+**Answer / Decision:**
+Want both to use in different scenarios. Different routes. So maybe the static one can be used in some kind of service.
+
+**Impact:**
+- `concept/12_azure_function_cloud_mode.md` — HTML Dashboard section
+
+**Next action:** Decide. Recommend: approach 2 (static shell + client-side fetch).
+
+---
+
+## OQ-051: IDataProvider implementation strategy for MAUI mode switch
+
+**Status:** Applied
+**Owner:** UI / Implementation
+**Related files:**
+- `concept/07_maui_blazor_ui_concept.md`
+- `concept/12_azure_function_cloud_mode.md`
+
+**Question:**
+When the user switches from Local to Cloud mode (or vice versa) in Settings, how does MAUI
+re-resolve the `IDataProvider` without requiring an app restart?
+
+**Options:**
+1. **Factory pattern** — `DataProviderFactory` resolves the correct provider on every call based on current `AppMode`
+2. **Restart required** — simple but poor UX
+3. **Proxy provider** — a `DelegatingDataProvider` singleton that holds a reference to the current inner provider and swaps it on mode change
+
+**Answer / Decision:**
+3 sounds solit. But if you have concerns go for 1.
+
+**Impact:**
+- `concept/07_maui_blazor_ui_concept.md` — IDataProvider section
+
+**Next action:** Decide. Recommend: option 3 (proxy) — avoids restart, cleanest DI pattern.
+
+---
+
+## OQ-052: Notification template rendering engine
+
+**Status:** Applied
+**Owner:** npm / Implementation
+**Related files:**
+- `concept/12_azure_function_cloud_mode.md`
+
+**Question:**
+The Teams notification template system uses `{{placeholder}}`-style variables.
+Should the rendering engine use:
+
+1. A minimal custom string-replace implementation (no dependency)
+2. `handlebars` npm package
+3. `mustache` npm package
+
+**Answer / Decision:**
+handlebars.js
+
+**Impact:**
+- `concept/12_azure_function_cloud_mode.md` — Notification Template System section
+
+**Next action:** Decide. Recommend: option 1 for MVP (few variables, no loops needed).
+
+---
+
+## OQ-053: Move cachePersistencePlugin registration out of core library
+
+**Status:** Applied
+**Owner:** npm
+**Related files:**
+- `packages/core/src/auth/AuthProviderFactory.ts`
+- `concept/12_azure_function_cloud_mode.md`
+
+**Question:**
+`AuthProviderFactory.ts` calls `useIdentityPlugin(cachePersistencePlugin)` at module load
+time. This enables disk-based token caching via keytar for interactive flows (device-code,
+interactive-browser). On Linux / Azure Functions, keytar is not available. The call is
+wrapped in `try/catch` so it silently no-ops — it does not break the function — but a
+Windows-specific plugin dependency in the core library is architecturally incorrect.
+
+Should `useIdentityPlugin(cachePersistencePlugin)` be moved to CLI bootstrap code
+(`packages/cli/src/index.ts`) and removed from the core library?
+
+**Answer / Decision:**
+if it is in the way for a working mvp we have to move it. but as i understand it we dont have to since not every auth mode will run in that exception? I would prefer to leave it in the npm package since that one can also be used in other tools which may want such a thing.
+
+**Impact:**
+- `packages/core/src/auth/AuthProviderFactory.ts` — remove `useIdentityPlugin` call and import
+- `packages/cli/src/index.ts` — add `useIdentityPlugin(cachePersistencePlugin)` call at startup
+- `packages/core/package.json` — `@azure/identity-cache-persistence` moves to CLI, not core
+
+**Next action:** Decide and implement. Low-risk cleanliness fix — current behavior is already
+correct on both platforms due to the try/catch.
+
+**Applied note:** Decision: keep `cachePersistencePlugin` registration in the core library.
+The `try/catch` correctly handles environments where keytar is unavailable (Linux, Azure Functions).
+The core package can be reused in other tools that benefit from persistent token caching.
+No code change required. Impact section above is superseded by this decision.

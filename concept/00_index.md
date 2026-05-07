@@ -30,6 +30,7 @@ CLAUDE.md
 | `09_open_questions.md` | Active | Claude-maintained | Unresolved questions and assumptions | every planning update |
 | `10_implementation_plan.md` | Approved | Claude-assisted | Implementation increments after concept stabilization | product code |
 | `11_skills_and_agents_plan.md` | Active | Claude-assisted | Claude skills, agents and command conventions | orchestration changes |
+| `12_azure_function_cloud_mode.md` | Draft | Claude-assisted | Azure Function cloud deployment and MAUI Cloud Mode | cloud implementation |
 | `99_orchestration.md` | Active | Manual-owned | How Claude should route and maintain work | every command |
 
 ## Supporting directories

@@ -270,6 +270,41 @@ A MSBuild `Target` in `apps/maui-blazor/` runs before the MAUI build and:
 3. Copies `node.exe` from a pinned Node.js LTS download or local cache.
 4. Copies `keytar/` files from `packages/cli/node_modules/keytar/`.
 
+## Local / Cloud Mode
+
+The MAUI app supports two operational modes. The active mode is stored in `UiSettings` and
+can be changed on the Settings page without restarting the app.
+
+| Mode | Engine | Data source |
+|---|---|---|
+| `local` (default) | CLI child process | `~/.aarm/` on local machine |
+| `cloud` | HTTP to Azure Function | Azure Blob Storage via function REST endpoints |
+
+### Mode-specific Settings fields
+
+| Setting | Local | Cloud |
+|---|---|---|
+| Config directory | `~/.aarm/` (read-only display) | — |
+| History directory | `{configDir}/history/` (read-only) | — |
+| Tenant profiles file | `{configDir}/tenants.json` (read-only) | — |
+| MSAL cache file | `{configDir}/msal.cache` (read-only) | — |
+| History file count | Shown (read-only) | — |
+| Function base URI | — | Editable |
+| Function key | — | Stored in Windows Credential Manager |
+| Last connection check | — | Read-only timestamp |
+
+### IDataProvider
+
+`IDataProvider` is the abstraction registered in the DI container.
+
+- `LocalCliDataProvider` — current implementation (spawns CLI child process)
+- `CloudHttpDataProvider` — HTTP calls to Azure Function endpoints
+
+The active implementation is resolved based on `AppMode` at startup. Mode switches during
+the session use a factory/strategy pattern to swap the registered instance.
+
+See `concept/12_azure_function_cloud_mode.md` for the Azure Function contract.
+
 ## App Startup Initialization
 
 `AppInitializationService` runs before the first page renders (invoked from `App.xaml.cs` or `MauiProgram.cs`).

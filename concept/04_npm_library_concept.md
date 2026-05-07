@@ -83,6 +83,14 @@ errors/
 | Interactive Browser | Mandatory | OAuth authorization code flow via browser and loopback redirect | Yes, localhost redirect |
 | Certificate | Optional | App-only service authentication with certificate | No |
 | Azure CLI Credential | Optional | Developer convenience; delegates to `az` CLI token cache | No |
+| Workload Identity Federation | Post-MVP | Credential-free cross-tenant access; requires one-time admin setup in target tenant | No |
+
+**Note on Managed Identity and Azure Function:** The function app's UAMI is used
+for Azure infrastructure access (Key Vault, Blob Storage) — not as a Graph scanning credential
+for external tenants. Cross-tenant Graph calls use `workload-identity-federation` (preferred,
+no stored credential), `client-secret`, or `certificate`, with stored credentials retrieved
+from Key Vault App Settings at runtime.
+See `concept/12_azure_function_cloud_mode.md` for the two-layer auth architecture.
 
 ## Library Boundary
 
@@ -133,7 +141,11 @@ Rules:
 - Non-sensitive profile data (tenant ID, display name, environment slug, auth mode, workspace ID) is stored in JSON files.
 - Secret values (client secret key material) must never be stored in plain JSON files. They must be stored in the OS credential store.
 - **Decided by OQ-012 and ADR-0005:** The npm CLI uses `keytar` (Windows Credential Manager) for storing client secret values.
-- The cache directory location defaults to a platform-appropriate user data folder and can be overridden with `--config-dir`.
+- The cache directory location defaults to `~/.aarm/` and can be overridden with:
+  - CLI flag: `--config-dir <path>`
+  - Environment variable: `AARM_CONFIG_DIR`
+- Every storage class (`HistoryStore`, `ConfigStore`) must accept `baseDir` as a constructor parameter so it can be pointed at a mounted path (Azure Files share in the cloud deployment) without code changes.
+- A Blob Storage adapter is a post-MVP concern. See OQ-048.
 
 ## Important Design Decision
 

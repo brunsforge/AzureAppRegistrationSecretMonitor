@@ -1,0 +1,76 @@
+{
+  "_comment": "Custom Teams Adaptive Card template for critical secret alerts (expiring within criticalWithinDays).",
+  "_placeholders": [
+    "{{tenantDisplayName}}   - tenant display name from job config",
+    "{{environmentName}}     - environment slug from job config",
+    "{{scanTimestamp}}       - ISO 8601 scan completion timestamp",
+    "{{criticalCount}}       - number of secrets expiring within criticalWithinDays",
+    "{{expiringCount}}       - number of secrets expiring within expiringWithinDays",
+    "{{secretCount}}         - total secrets scanned",
+    "{{dashboardUrl}}        - base URL of the Azure Function HTML dashboard"
+  ],
+
+  "type": "message",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "contentUrl": null,
+      "content": {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+          {
+            "type": "TextBlock",
+            "text": "CRITICAL: Expiring Secrets Detected",
+            "weight": "bolder",
+            "size": "large",
+            "color": "attention"
+          },
+          {
+            "type": "TextBlock",
+            "text": "{{tenantDisplayName}} — {{environmentName}}",
+            "spacing": "none",
+            "isSubtle": true
+          },
+          {
+            "type": "FactSet",
+            "spacing": "medium",
+            "facts": [
+              {
+                "title": "Critical (expiring very soon)",
+                "value": "{{criticalCount}}"
+              },
+              {
+                "title": "Expiring (within threshold)",
+                "value": "{{expiringCount}}"
+              },
+              {
+                "title": "Total secrets scanned",
+                "value": "{{secretCount}}"
+              },
+              {
+                "title": "Scanned at",
+                "value": "{{scanTimestamp}}"
+              }
+            ]
+          },
+          {
+            "type": "TextBlock",
+            "text": "Immediate action required. Rotate critical secrets before they expire.",
+            "wrap": true,
+            "spacing": "medium",
+            "color": "attention"
+          }
+        ],
+        "actions": [
+          {
+            "type": "Action.OpenUrl",
+            "title": "Open Dashboard",
+            "url": "{{dashboardUrl}}"
+          }
+        ]
+      }
+    }
+  ]
+}
