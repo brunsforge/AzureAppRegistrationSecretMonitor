@@ -9,6 +9,9 @@ public interface IDataProvider
 
     bool IsCloudMode { get; }
 
+    /// <summary>All configured tenants — drives dropdowns in every page.</summary>
+    Task<IReadOnlyList<TenantProfile>> GetTenantsAsync();
+
     /// <summary>Flat list of all secrets — for the Secret List page.</summary>
     Task<ResultEnvelope<List<SecretSummary>>?> GetSecretsAsync(
         string tenantId, string? environmentName = null);

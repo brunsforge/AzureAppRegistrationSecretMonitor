@@ -30,6 +30,16 @@ public class CloudHttpDataProvider : IDataProvider
         _http.DefaultRequestHeaders.Add("x-functions-key", functionKey);
     }
 
+    public async Task<IReadOnlyList<TenantProfile>> GetTenantsAsync()
+    {
+        var response = await _http.GetAsync("tenants");
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync();
+        // Unknown fields (e.g. "environments") are silently ignored by System.Text.Json.
+        return JsonSerializer.Deserialize<List<TenantProfile>>(json, JsonOptions)
+               ?? new List<TenantProfile>();
+    }
+
     public async Task<ResultEnvelope<List<SecretSummary>>?> GetSecretsAsync(
         string tenantId, string? environmentName = null)
     {

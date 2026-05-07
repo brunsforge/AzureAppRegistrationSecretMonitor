@@ -192,11 +192,24 @@
 <!-- ── Configured Tenants ────────────────────────────────────────────────── -->
 <section class="settings-section">
     <h2>Configured tenants</h2>
-    <p class="text-muted" style="font-size:.8rem">
-        Auth modes that require passwords (<code>client-secret</code>, <code>username-password</code>,
-        <code>certificate</code>) must be configured or reconfigured via the <code>aarm</code> CLI.
-        Non-secret modes can be changed here directly.
-    </p>
+    @if (SettingsSvc.Settings.AppMode == "cloud")
+    {
+        <div style="font-size:.82rem;color:var(--text-muted);margin-bottom:.75rem">
+            Cloud Mode — tenants are configured via <code>jobs.json</code> in Azure Blob Storage.
+            Credentials are stored in Azure Key Vault.
+            Auth mode changes must be made in the job configuration.
+            <a href="https://portal.azure.com" target="_blank" rel="noopener"
+               style="color:var(--accent);margin-left:.4rem">Open Azure Portal ↗</a>
+        </div>
+    }
+    else
+    {
+        <p class="text-muted" style="font-size:.8rem">
+            Auth modes that require passwords (<code>client-secret</code>, <code>username-password</code>,
+            <code>certificate</code>) must be configured or reconfigured via the <code>aarm</code> CLI.
+            Non-secret modes can be changed here directly.
+        </p>
+    }
 
     @if (_tenants.Count == 0)
     {
@@ -239,6 +252,11 @@
                             {
                                 <button class="btn btn-sm btn-primary me-1" @onclick="() => SaveAuthModeAsync(t.TenantId)">Save</button>
                                 <button class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Cancel</button>
+                            }
+                            else if (SettingsSvc.Settings.AppMode == "cloud")
+                            {
+                                <a href="https://portal.azure.com" target="_blank" rel="noopener"
+                                   style="font-size:.8rem;color:var(--accent)">Manage in Azure ↗</a>
                             }
                             else if (IsNonSecretMode(t.AuthMode))
                             {

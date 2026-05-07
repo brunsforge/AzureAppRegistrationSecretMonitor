@@ -1,10 +1,13 @@
 @page "/"
+@using AzureAppRegistrationMonitor.Services.DataProviders
 @inject TenantOverviewViewModel ViewModel
 @inject TenantConfigRepository TenantRepo
 @inject CredentialRepository Credentials
 @inject NotificationService Notify
 @inject AppStateService AppState
 @inject NavigationManager Nav
+@inject IDataProvider DataProvider
+@inject SettingsService SettingsSvc
 @implements IDisposable
 
 <PageTitle>Tenants — AARM</PageTitle>
@@ -12,13 +15,31 @@
 <div class="aarm-page-header">
     <h1>Tenants</h1>
     <div class="aarm-actions">
-        <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">+ Add Tenant</button>
+        @if (!_isCloudMode)
+        {
+            <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">+ Add Tenant</button>
+        }
         <button class="btn btn-outline-secondary btn-sm" @onclick="LoadAsync">Refresh</button>
     </div>
 </div>
 
-@* ── Add / Edit form ──────────────────────────────────────────────────── *@
-@if (_showForm)
+@* ── Cloud Mode banner ────────────────────────────────────────────────── *@
+@if (_isCloudMode)
+{
+    <div class="alert" style="background:var(--surface-alt,#1e293b);border:1px solid var(--border);
+                              border-radius:.5rem;padding:.75rem 1rem;font-size:.82rem;margin-bottom:1rem">
+        <strong>Cloud Mode</strong> — Tenant configuration is managed via
+        <code>jobs.json</code> in Azure Blob Storage.
+        Credentials are stored in Key Vault.
+        <br/>
+        <a href="https://portal.azure.com" target="_blank" rel="noopener"
+           style="color:var(--accent)">Open Azure Portal ↗</a>
+        &nbsp;to manage jobs, credentials and settings.
+    </div>
+}
+
+@* ── Add / Edit form (Local Mode only) ───────────────────────────────── *@
+@if (_showForm && !_isCloudMode)
 {
     <div class="aarm-form-panel">
         <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">
@@ -138,8 +159,8 @@
     </div>
 }
 
-@* ── Delete confirmation ──────────────────────────────────────────────── *@
-@if (_confirmDeleteId is not null)
+@* ── Delete confirmation (Local Mode only) ───────────────────────────── *@
+@if (_confirmDeleteId is not null && !_isCloudMode)
 {
     var t = ViewModel.Tenants.FirstOrDefault(x => x.TenantId == _confirmDeleteId);
     <div class="aarm-form-panel" style="border-color:var(--risk-high)">
@@ -234,12 +255,20 @@ else
                                 @onclick="() => NavigateToSecrets(tenant)">
                             Scan
                         </button>
-                        <button class="btn btn-sm btn-link p-0 me-2"
-                                title="Edit"
-                                @onclick="() => ShowEditForm(tenant)">✏</button>
-                        <button class="btn btn-sm btn-link p-0 text-danger"
-                                title="Delete"
-                                @onclick="() => _confirmDeleteId = tenant.TenantId">✕</button>
+                        @if (!_isCloudMode)
+                        {
+                            <button class="btn btn-sm btn-link p-0 me-2"
+                                    title="Edit"
+                                    @onclick="() => ShowEditForm(tenant)">✏</button>
+                            <button class="btn btn-sm btn-link p-0 text-danger"
+                                    title="Delete"
+                                    @onclick="() => _confirmDeleteId = tenant.TenantId">✕</button>
+                        }
+                        else
+                        {
+                            <a href="https://portal.azure.com" target="_blank" rel="noopener"
+                               class="btn btn-sm btn-link p-0" title="Manage in Azure Portal">↗</a>
+                        }
                     </td>
                 </tr>
             }
@@ -265,12 +294,27 @@ else
     // ── Delete confirmation ───────────────────────────────────────────────────
     private string? _confirmDeleteId;
 
+    private bool _isCloudMode;
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _isCloudMode = SettingsSvc.Settings.AppMode == "cloud";
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
-        await ViewModel.LoadTenantsAsync();
+        if (_isCloudMode)
+        {
+            // In Cloud Mode load tenants from the Azure Function endpoint.
+            var tenants = await DataProvider.GetTenantsAsync();
+            await ViewModel.LoadFromExternalAsync(tenants);
+        }
+        else
+        {
+            await ViewModel.LoadTenantsAsync();
+        }
         StateHasChanged();
     }
 

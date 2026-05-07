@@ -1,0 +1,314 @@
+{
+  "info": {
+    "_postman_id": "aarm-azure-function-collection",
+    "name": "AARM Azure Function",
+    "description": "Azure App Registration Monitor — API collection for the AARM Azure Function.\n\nAuthentication: All requests use the Function Key header `x-functions-key: {{functionKey}}`.\nSet `baseUrl` and `functionKey` in the AARM Dev environment before running requests.\n\nFor AAD token auth (if Easy Auth is configured on the Function App):\n1. Fill in `aadTenantId`, `aadClientId`, `aadClientSecret` in the environment.\n2. Run the **Get AAD Token** request — the access token is stored in `accessToken` automatically.\n3. Switch collection auth to Bearer Token using `{{accessToken}}`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key",   "value": "x-functions-key", "type": "string" },
+      { "key": "value", "value": "{{functionKey}}",  "type": "string" },
+      { "key": "in",    "value": "header",            "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Token acquisition for Azure AD authentication (optional — use if the Function App has Easy Auth / Azure AD authentication configured in addition to Function Keys).",
+      "item": [
+        {
+          "name": "Get AAD Token (client credentials)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var data = pm.response.json();",
+                  "if (data.access_token) {",
+                  "    pm.environment.set('accessToken', data.access_token);",
+                  "    console.log('Access token set in environment variable accessToken');",
+                  "    pm.test('Token acquired', () => pm.expect(data.access_token).to.be.a('string'));",
+                  "} else {",
+                  "    console.error('No access_token in response:', JSON.stringify(data));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type",    "value": "client_credentials" },
+                { "key": "client_id",     "value": "{{aadClientId}}" },
+                { "key": "client_secret", "value": "{{aadClientSecret}}" },
+                { "key": "scope",         "value": "https://management.azure.com/.default" }
+              ]
+            },
+            "url": {
+              "raw": "https://login.microsoftonline.com/{{aadTenantId}}/oauth2/v2.0/token",
+              "protocol": "https",
+              "host": ["login", "microsoftonline", "com"],
+              "path": ["{{aadTenantId}}", "oauth2", "v2.0", "token"]
+            },
+            "description": "Obtains an AAD access token using client credentials. The `test` script saves the token to `{{accessToken}}` automatically.\n\nRequires: `aadTenantId`, `aadClientId`, `aadClientSecret` set in the environment."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Status",
+      "item": [
+        {
+          "name": "GET Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('healthy is true', () => {",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.healthy).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "status"]
+            },
+            "description": "Health check. Confirms the function is running and can reach Blob Storage.\nReturns job count and last scan timestamp."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenants",
+      "item": [
+        {
+          "name": "GET Tenants",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns array', () => {",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data).to.be.an('array');",
+                  "});",
+                  "// Auto-set tenantId from first result if not already set",
+                  "var data = pm.response.json();",
+                  "if (data.length > 0 && !pm.environment.get('tenantId')) {",
+                  "    pm.environment.set('tenantId', data[0].tenantId);",
+                  "    pm.environment.set('envName', data[0].defaultEnvironmentName || 'PROD');",
+                  "    console.log('Auto-set tenantId =', data[0].tenantId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/tenants",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tenants"]
+            },
+            "description": "Returns all configured tenants as TenantProfile objects, enriched with display name, auth mode, last scan timestamp and available environment names.\n\nThe post-response script auto-sets `tenantId` and `envName` from the first result if they are not already set."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Secrets",
+      "item": [
+        {
+          "name": "GET Secrets (latest scan)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 or 404', () => {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('ResultEnvelope structure', () => {",
+                  "        var data = pm.response.json();",
+                  "        pm.expect(data).to.have.property('success');",
+                  "        pm.expect(data).to.have.property('data');",
+                  "        pm.expect(data).to.have.property('metadata');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/environments/{{envName}}/secrets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tenants", "{{tenantId}}", "environments", "{{envName}}", "secrets"]
+            },
+            "description": "Returns the latest secret scan as `ResultEnvelope<AppRegistrationSummary[]>` — the full nested structure (per app with nested secrets).\n\nMAUI `CloudHttpDataProvider` flattens this to `SecretSummary[]` for the Secret List page and uses it as-is for the Dashboard.\n\n404 if no scan has run yet for this tenant/environment."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Preflight",
+      "item": [
+        {
+          "name": "GET Preflight (latest)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200 or 404', () => {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('authValid field present', () => {",
+                  "        var env = pm.response.json();",
+                  "        pm.expect(env.data).to.have.property('authValid');",
+                  "        pm.expect(env.data).to.have.property('capabilities');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/environments/{{envName}}/preflight",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tenants", "{{tenantId}}", "environments", "{{envName}}", "preflight"]
+            },
+            "description": "Returns the latest preflight capability check result.\n\n404 if no preflight has run yet."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scan",
+      "item": [
+        {
+          "name": "POST Trigger Manual Scan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 202 Accepted', () => pm.response.to.have.status(202));",
+                  "pm.test('accepted flag is true', () => {",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.accepted).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "body": { "mode": "raw", "raw": "" },
+            "url": {
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/environments/{{envName}}/scan",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tenants", "{{tenantId}}", "environments", "{{envName}}", "scan"]
+            },
+            "description": "Triggers an immediate scan outside the regular schedule. Returns 202 Accepted immediately; the scan runs asynchronously in the background.\n\nCheck the `/secrets` endpoint after a few seconds to see updated results.\n\n404 if no job is configured for this tenant/environment combination."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "GET Dashboard (interactive HTML)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content-Type is HTML', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "dashboard"],
+              "query": [
+                { "key": "tenant", "value": "{{tenantId}}", "disabled": true },
+                { "key": "env",    "value": "{{envName}}",  "disabled": true }
+              ]
+            },
+            "description": "Returns a self-contained interactive HTML page. Data is loaded client-side via fetch() from the JSON endpoints.\n\nAuth level: anonymous (Function Key stored in browser localStorage).\n\nOptional query params: `tenant`, `env` — pre-select a tenant/environment on load."
+          }
+        },
+        {
+          "name": "GET Report (server-rendered HTML)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content-Type is HTML', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/report?tenant={{tenantId}}&env={{envName}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "report"],
+              "query": [
+                { "key": "tenant", "value": "{{tenantId}}" },
+                { "key": "env",    "value": "{{envName}}" }
+              ]
+            },
+            "description": "Returns a fully server-side rendered HTML snapshot. No JavaScript — all data embedded at request time.\n\nUse cases: email attachments, archiving, SharePoint embedding, CI pipeline reports."
+          }
+        }
+      ]
+    }
+  ],
+  "variable": []
+}

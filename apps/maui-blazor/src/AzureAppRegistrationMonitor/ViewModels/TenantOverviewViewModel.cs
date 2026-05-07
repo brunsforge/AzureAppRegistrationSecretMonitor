@@ -46,6 +46,18 @@ public class TenantOverviewViewModel
         }
     }
 
+    /// <summary>
+    /// Cloud Mode: populate the tenant list from an externally loaded source
+    /// (Azure Function /api/tenants) without touching the local repository.
+    /// </summary>
+    public Task LoadFromExternalAsync(IReadOnlyList<TenantProfile> tenants)
+    {
+        Tenants = tenants;
+        IsLoading = false;
+        ErrorMessage = null;
+        return Task.CompletedTask;
+    }
+
     public async Task RunPreflightAsync(string tenantNameOrId, Action stateChanged)
     {
         _preflightRunning[tenantNameOrId] = true;

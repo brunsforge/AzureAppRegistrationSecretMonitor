@@ -12,16 +12,77 @@ app.http('tenants', {
   handler: async (_req, context) => tenantsHandler(context),
 });
 
+/**
+ * Returns a rich TenantProfile array compatible with the MAUI TenantProfile record.
+ * Groups jobs by tenantId, joins runtime state for lastSuccessfulScanAt/lastPreflightAt,
+ * and adds available environment names from existing scan blobs.
+ */
 async function tenantsHandler(context: InvocationContext): Promise<HttpResponseInit> {
   try {
-    const tenantEnvs = await getResultStore().listTenantEnvironments();
-    const grouped = new Map<string, string[]>();
-    for (const { tenantId, envName } of tenantEnvs) {
-      const envs = grouped.get(tenantId) ?? [];
-      envs.push(envName);
-      grouped.set(tenantId, envs);
+    const [{ jobs }, scanEnvs] = await Promise.all([
+      getJobConfigStore().readJobs(),
+      getResultStore().listTenantEnvironments(),
+    ]);
+
+    // Build a map of richer tenant data, preferring the first job per tenantId.
+    const byTenant = new Map<string, {
+      displayName: string; authMode: string; clientId: string | null;
+      defaultEnvironmentName: string; logAnalyticsWorkspaceId: string | null;
+    }>();
+    for (const job of jobs) {
+      if (!byTenant.has(job.tenantId)) {
+        byTenant.set(job.tenantId, {
+          displayName:            job.tenantDisplayName,
+          authMode:               job.authMode,
+          clientId:               job.clientId ?? null,
+          defaultEnvironmentName: job.environmentName,
+          logAnalyticsWorkspaceId: job.logAnalytics?.workspaceId ?? null,
+        });
+      }
     }
-    return json([...grouped.entries()].map(([tenantId, environments]) => ({ tenantId, environments })));
+
+    // Group scan environments per tenant.
+    const envsByTenant = new Map<string, string[]>();
+    for (const { tenantId, envName } of scanEnvs) {
+      const envs = envsByTenant.get(tenantId) ?? [];
+      envs.push(envName);
+      envsByTenant.set(tenantId, envs);
+    }
+
+    // Load runtime states to get last scan timestamps.
+    const runtimeStore = getRuntimeStateStore();
+    const allTenantIds = new Set([...byTenant.keys(), ...envsByTenant.keys()]);
+
+    const profiles = await Promise.all(
+      [...allTenantIds].map(async (tenantId) => {
+        const meta = byTenant.get(tenantId);
+        const environments = envsByTenant.get(tenantId) ?? [];
+
+        // Collect lastRunAt across all jobs for this tenant.
+        const jobsForTenant = jobs.filter((j) => j.tenantId === tenantId);
+        const states = await Promise.all(jobsForTenant.map((j) => runtimeStore.read(j.id)));
+        const timestamps = states.map((s) => s.lastRunAt).filter(Boolean) as string[];
+        const lastRunAt = timestamps.sort().at(-1) ?? null;
+
+        const now = new Date().toISOString();
+        return {
+          tenantId,
+          displayName:             meta?.displayName ?? tenantId,
+          authMode:                meta?.authMode ?? 'client-secret',
+          clientId:                meta?.clientId ?? null,
+          username:                null,
+          defaultEnvironmentName:  meta?.defaultEnvironmentName ?? environments[0] ?? 'default',
+          logAnalyticsWorkspaceId: meta?.logAnalyticsWorkspaceId ?? null,
+          createdAt:               now,
+          updatedAt:               lastRunAt ?? now,
+          lastPreflightAt:         lastRunAt,
+          lastSuccessfulScanAt:    lastRunAt,
+          environments,
+        };
+      }),
+    );
+
+    return json(profiles);
   } catch (err) {
     context.error(`Tenants list failed: ${err}`);
     return json({ error: String(err) }, 500);

@@ -9,15 +9,20 @@ namespace AzureAppRegistrationMonitor.Services.DataProviders;
 public class LocalCliDataProvider : IDataProvider
 {
     private readonly CliExecutionService _cli;
+    private readonly TenantConfigRepository _tenantRepo;
 
     public event Action<string>? ProgressMessage;
     public bool IsCloudMode => false;
 
-    public LocalCliDataProvider(CliExecutionService cli)
+    public LocalCliDataProvider(CliExecutionService cli, TenantConfigRepository tenantRepo)
     {
         _cli = cli;
+        _tenantRepo = tenantRepo;
         _cli.ProgressMessage += msg => ProgressMessage?.Invoke(msg);
     }
+
+    public async Task<IReadOnlyList<TenantProfile>> GetTenantsAsync() =>
+        await _tenantRepo.ListTenantsAsync();
 
     public Task<ResultEnvelope<List<SecretSummary>>?> GetSecretsAsync(
         string tenantId, string? environmentName = null)

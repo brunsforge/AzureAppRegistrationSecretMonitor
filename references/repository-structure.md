@@ -15,6 +15,8 @@ AzureAppRegistrationSecretMonitor/
   prompts/
   scripts/            ← local publish and build automation scripts
   infra/              ← Bicep templates for Azure infrastructure (Function App, Storage, Key Vault, AI)
+  tools/
+    postman/          ← Postman collection and environment for the Azure Function API
   .claude/
     commands/
     skills/

@@ -133,7 +133,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _tenants = await TenantRepo.ListTenantsAsync();
+        _tenants = await DataProvider.GetTenantsAsync();
 
         // Pre-select: AppState → last scanned → default → first tenant
         _selectedTenant =

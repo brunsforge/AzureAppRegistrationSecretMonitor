@@ -28,6 +28,9 @@ public class DelegatingDataProvider : IDataProvider
         WireEvents();
     }
 
+    public Task<IReadOnlyList<TenantProfile>> GetTenantsAsync()
+        => _inner.GetTenantsAsync();
+
     public Task<ResultEnvelope<List<SecretSummary>>?> GetSecretsAsync(
         string tenantId, string? environmentName = null)
         => _inner.GetSecretsAsync(tenantId, environmentName);
