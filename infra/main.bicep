@@ -131,12 +131,13 @@ resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-// UAMI needs Key Vault Secrets User to read scanning credentials at runtime.
-resource uamiKvSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(kv.id, uami.id, roles.keyVaultSecretsUser)
+// UAMI needs Key Vault Secrets Officer to read, create, rotate and delete scanning credentials.
+// (Secrets Officer = Secrets User + write + delete)
+resource uamiKvSecretsOfficer 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(kv.id, uami.id, roles.keyVaultSecretsOfficer)
   scope: kv
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.keyVaultSecretsUser)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.keyVaultSecretsOfficer)
     principalId: uami.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -271,6 +272,10 @@ resource fn 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'AARM_STORAGE_URI'
           value: 'https://${storage.name}.blob.core.windows.net'
+        }
+        {
+          name: 'AARM_KEYVAULT_URI'
+          value: kv.properties.vaultUri
         }
         {
           name: 'AARM_DASHBOARD_URL'

@@ -4,31 +4,25 @@
     "Deploy to: Storage Account → Container 'aarm-config' → Blob 'jobs.json'",
     "",
     "CREDENTIAL SETUP (per job that uses client-secret or certificate authMode):",
-    "  1. Create the client secret value as a secret in Azure Key Vault.",
-    "     Example: az keyvault secret set --vault-name <vault> --name aarm-contoso-prod --value <secret>",
-    "  2. Add a Function App Setting referencing the Key Vault secret:",
-    "     Name:  AARM_SECRET_CONTOSO_PROD",
-    "     Value: @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/aarm-contoso-prod/)",
-    "     CLI:   az functionapp config appsettings set --name <fn> --resource-group <rg>",
-    "              --settings 'AARM_SECRET_CONTOSO_PROD=@Microsoft.KeyVault(SecretUri=...)'",
-    "  3. Set credentialRef in the job to the App Setting name: 'AARM_SECRET_CONTOSO_PROD'",
-    "  4. The Azure Functions runtime resolves the Key Vault reference automatically.",
-    "     Application code reads: process.env['AARM_SECRET_CONTOSO_PROD']",
+    "  credentialRef is the Key Vault secret name. Convention: 'aarm-{jobId}'",
+    "  The function reads the secret directly from KV at scan time using its UAMI.",
     "",
-    "NAMING CONVENTION for App Settings:",
-    "  AARM_SECRET_ + JOB_ID in UPPER_SNAKE_CASE",
-    "  job id 'contoso-prod' → AARM_SECRET_CONTOSO_PROD",
-    "  job id 'fabrikam-dev' → AARM_SECRET_FABRIKAM_DEV"
+    "  Option A — Via MAUI Cloud Mode (recommended):",
+    "    Use the Add Tenant form in MAUI. The UI sends the credential value to the",
+    "    function API which stores it in Key Vault automatically.",
+    "",
+    "  Option B — Via Azure CLI:",
+    "    az keyvault secret set --vault-name <vault> --name aarm-contoso-prod --value <secret>",
+    "    Then set credentialRef: 'aarm-contoso-prod' in this file.",
+    "",
+    "  Local dev fallback (no AARM_KEYVAULT_URI set):",
+    "    The function reads from env var AARM_SECRET_<NAME_UPPER_SNAKE>.",
+    "    Example: credentialRef 'aarm-contoso-prod' → env var 'AARM_SECRET_AARM_CONTOSO_PROD'"
   ],
   "version": "1.0",
   "jobs": [
     {
-      "_comment": [
-        "Contoso PROD — daily scan at 06:00 UTC.",
-        "Uses a custom critical template stored in aarm-config/templates/critical-contoso.json.",
-        "App Setting required: AARM_SECRET_CONTOSO_PROD",
-        "  Value: @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/aarm-contoso-prod/)"
-      ],
+      "_comment": "Contoso PROD — daily scan at 06:00 UTC. Custom critical template.",
 
       "id": "contoso-prod",
       "enabled": true,
@@ -39,7 +33,7 @@
 
       "authMode": "client-secret",
       "clientId": "<app-registration-client-id-in-contoso-tenant>",
-      "credentialRef": "AARM_SECRET_CONTOSO_PROD",
+      "credentialRef": "aarm-contoso-prod",
 
       "schedule": {
         "intervalDays": 1,
@@ -70,13 +64,7 @@
       }
     },
     {
-      "_comment": [
-        "Fabrikam DEV — weekly scan on Monday at 08:00 UTC.",
-        "Uses a custom summary template stored in aarm-config/templates/summary-fabrikam.json.",
-        "Error-only webhooks — no status or alert notifications.",
-        "App Setting required: AARM_SECRET_FABRIKAM_DEV",
-        "  Value: @Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/aarm-fabrikam-dev/)"
-      ],
+      "_comment": "Fabrikam DEV — weekly scan at 08:00 UTC. Custom summary template. Error-only webhooks.",
 
       "id": "fabrikam-dev",
       "enabled": true,
@@ -87,7 +75,7 @@
 
       "authMode": "client-secret",
       "clientId": "<app-registration-client-id-in-fabrikam-tenant>",
-      "credentialRef": "AARM_SECRET_FABRIKAM_DEV",
+      "credentialRef": "aarm-fabrikam-dev",
 
       "schedule": {
         "intervalDays": 7,

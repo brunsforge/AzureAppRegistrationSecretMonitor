@@ -10,5 +10,6 @@ await initializeStorage();
 import './triggers/timerTrigger.js';
 import './http/statusHandler.js';
 import './http/dataHandlers.js';
+import './http/tenantCrudHandlers.js';
 import './http/dashboardHandler.js';
 import './http/reportHandler.js';

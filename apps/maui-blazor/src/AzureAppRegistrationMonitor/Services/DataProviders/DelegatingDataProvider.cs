@@ -46,6 +46,15 @@ public class DelegatingDataProvider : IDataProvider
     public Task<bool> TriggerScanAsync(string tenantId)
         => _inner.TriggerScanAsync(tenantId);
 
+    public Task<TenantProfile?> AddTenantAsync(CloudTenantRequest request)
+        => _inner.AddTenantAsync(request);
+
+    public Task<TenantProfile?> UpdateTenantAsync(string tenantId, CloudTenantRequest request)
+        => _inner.UpdateTenantAsync(tenantId, request);
+
+    public Task<bool> DeleteTenantAsync(string tenantId)
+        => _inner.DeleteTenantAsync(tenantId);
+
     private void OnInnerProgress(string msg) => ProgressMessage?.Invoke(msg);
     private void WireEvents() => _inner.ProgressMessage += OnInnerProgress;
 }

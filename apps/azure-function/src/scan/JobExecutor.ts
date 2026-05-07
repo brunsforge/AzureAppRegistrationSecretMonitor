@@ -1,5 +1,6 @@
 import { ClientSecretCredential, ManagedIdentityCredential, ClientAssertionCredential } from '@azure/identity';
 import type { TokenCredential } from '@azure/identity';
+import { getSecret } from '../storage/KeyVaultCredentialStore.js';
 import {
   GraphApplicationReader,
   createGraphClient,
@@ -19,7 +20,7 @@ export interface JobScanResult {
 }
 
 export async function executeJob(job: JobConfig): Promise<JobScanResult> {
-  const credential = resolveCredential(job);
+  const credential = await resolveCredential(job);
   const graphClient = createGraphClient(credential);
 
   const [preflightResult, inventory] = await Promise.all([
@@ -44,15 +45,15 @@ export async function executeJob(job: JobConfig): Promise<JobScanResult> {
   };
 }
 
-function resolveCredential(job: JobConfig): TokenCredential {
+async function resolveCredential(job: JobConfig): Promise<TokenCredential> {
   switch (job.authMode) {
     case 'client-secret': {
       if (!job.credentialRef) {
         throw new Error(`Job "${job.id}": credentialRef is required for client-secret mode`);
       }
-      const secret = process.env[job.credentialRef];
+      const secret = await getSecret(job.credentialRef);
       if (!secret) {
-        throw new Error(`Job "${job.id}": env var ${job.credentialRef} is not set or empty`);
+        throw new Error(`Job "${job.id}": secret "${job.credentialRef}" not found in Key Vault or env fallback`);
       }
       return new ClientSecretCredential(job.tenantId, job.clientId, secret);
     }

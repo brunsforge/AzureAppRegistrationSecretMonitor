@@ -30,16 +30,15 @@ public static class MauiProgram
         builder.Services.AddSingleton<AppStateService>();
         builder.Services.AddSingleton<AppInitializationService>();
         builder.Services.AddSingleton<CliExecutionService>();
-        builder.Services.AddSingleton<TenantConfigRepository>(); // declared before LocalCliDataProvider (dependency)
+        builder.Services.AddSingleton<CredentialRepository>();          // before LocalCliDataProvider
+        builder.Services.AddSingleton<TenantConfigRepository>();        // before LocalCliDataProvider
         builder.Services.AddSingleton<LocalCliDataProvider>();
         builder.Services.AddSingleton<DelegatingDataProvider>();
         builder.Services.AddSingleton<IDataProvider>(sp => sp.GetRequiredService<DelegatingDataProvider>());
-        // TenantConfigRepository already registered above (before LocalCliDataProvider).
         builder.Services.AddSingleton<HistoryRepository>();
         builder.Services.AddSingleton<SettingsService>();
         builder.Services.AddSingleton<SystemTrayService>();
         builder.Services.AddSingleton<TeamsNotificationService>();
-        builder.Services.AddSingleton<CredentialRepository>();
         builder.Services.AddSingleton<NotificationService>();
 
         // View models

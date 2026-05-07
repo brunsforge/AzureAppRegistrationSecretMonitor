@@ -40,6 +40,16 @@ export class BlobJobConfigStore {
     }
   }
 
+  /** Overwrites jobs.json with the provided config. */
+  async writeJobs(config: JobsConfig): Promise<void> {
+    const container = this.blobs.getContainerClient(CONFIG_CONTAINER);
+    const blob = container.getBlockBlobClient('jobs.json');
+    const content = JSON.stringify(config, null, 2);
+    await blob.upload(content, Buffer.byteLength(content), {
+      blobHTTPHeaders: { blobContentType: 'application/json' },
+    });
+  }
+
   /** Returns the raw template JSON string, or null if the blob does not exist. */
   async readTemplate(blobName: string): Promise<string | null> {
     const container = this.blobs.getContainerClient(CONFIG_CONTAINER);

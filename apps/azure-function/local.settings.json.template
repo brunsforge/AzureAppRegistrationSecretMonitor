@@ -9,6 +9,7 @@
     "AZURE_CLIENT_ID": "",
 
     "AARM_STORAGE_URI": "https://<account>.blob.core.windows.net",
+    "AARM_KEYVAULT_URI": "https://<vault-name>.vault.azure.net",
     "AARM_DASHBOARD_URL": "http://localhost:7071/api/dashboard",
 
     "APPLICATIONINSIGHTS_CONNECTION_STRING": "",

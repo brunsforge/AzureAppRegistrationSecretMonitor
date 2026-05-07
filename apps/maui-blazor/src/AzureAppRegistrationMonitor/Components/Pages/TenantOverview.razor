@@ -1,5 +1,6 @@
 @page "/"
 @using AzureAppRegistrationMonitor.Services.DataProviders
+@using AzureAppRegistrationMonitor.Models
 @inject TenantOverviewViewModel ViewModel
 @inject TenantConfigRepository TenantRepo
 @inject CredentialRepository Credentials
@@ -15,7 +16,11 @@
 <div class="aarm-page-header">
     <h1>Tenants</h1>
     <div class="aarm-actions">
-        @if (!_isCloudMode)
+        @if (_isCloudMode)
+        {
+            <button class="btn btn-primary btn-sm" @onclick="ShowCloudAddForm">+ Add Tenant</button>
+        }
+        else
         {
             <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">+ Add Tenant</button>
         }
@@ -34,15 +39,107 @@
 @* ── Cloud Mode banner ────────────────────────────────────────────────── *@
 @if (_isCloudMode)
 {
-    <div class="alert" style="background:var(--surface-alt,#1e293b);border:1px solid var(--border);
-                              border-radius:.5rem;padding:.75rem 1rem;font-size:.82rem;margin-bottom:1rem">
-        <strong>Cloud Mode</strong> — Tenant configuration is managed via
-        <code>jobs.json</code> in Azure Blob Storage.
-        Credentials are stored in Key Vault.
-        <br/>
-        <a href="https://portal.azure.com" target="_blank" rel="noopener"
-           style="color:var(--accent)">Open Azure Portal ↗</a>
-        &nbsp;to manage jobs, credentials and settings.
+    <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.75rem">
+        ☁ Cloud Mode — credentials are stored in Azure Key Vault.
+    </div>
+}
+
+@* ── Cloud Mode Add / Edit form ───────────────────────────────────────── *@
+@if (_showCloudForm)
+{
+    <div class="aarm-form-panel">
+        <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">
+            @(_cloudEditTenantId is null ? "Add Tenant (Cloud Mode)" : "Edit Tenant (Cloud Mode)")
+        </h2>
+        @if (_cloudFormError is not null)
+        {
+            <div class="aarm-error mb-2" style="font-size:.82rem">@_cloudFormError</div>
+        }
+        <div class="settings-row">
+            <label>Display name <span class="req">*</span></label>
+            <input class="form-control" style="max-width:280px" @bind="_cf.TenantDisplayName" />
+        </div>
+        <div class="settings-row">
+            <label>Tenant ID (GUID) <span class="req">*</span></label>
+            <input class="form-control" style="max-width:380px" @bind="_cf.TenantId"
+                   disabled="@(_cloudEditTenantId is not null)" />
+        </div>
+        <div class="settings-row">
+            <label>Auth mode <span class="req">*</span></label>
+            <select class="form-select" style="max-width:240px" @bind="_cf.AuthMode">
+                <option value="client-secret">client-secret</option>
+                <option value="workload-identity-federation">workload-identity-federation</option>
+            </select>
+            <small>
+                @if (_cf.AuthMode == "client-secret")
+                {
+                    <span>Service principal. Client ID + Secret are sent to the function and stored in Azure Key Vault.</span>
+                }
+                else
+                {
+                    <span>Credential-free. The target tenant admin must configure a federated credential trust.</span>
+                }
+            </small>
+        </div>
+        @if (_cf.AuthMode == "client-secret")
+        {
+            <div class="settings-row">
+                <label>Client ID <span class="req">*</span></label>
+                <input class="form-control" style="max-width:380px" @bind="_cf.ClientId" />
+            </div>
+            <div class="settings-row">
+                <label>Client Secret @(_cloudEditTenantId is not null ? "" : "*")</label>
+                <input type="password" class="form-control" style="max-width:380px"
+                       placeholder="@(_cloudEditTenantId is not null ? "Leave blank to keep existing" : "Enter secret value")"
+                       @bind="_cf.CredentialValue" />
+                <small>Stored in Azure Key Vault — never in plain files or locally.</small>
+            </div>
+        }
+        <div class="settings-row">
+            <label>Scan schedule</label>
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                <span style="font-size:.82rem">Every</span>
+                <input type="number" class="form-control" style="width:70px"
+                       min="1" max="365" @bind="_cf.Schedule.IntervalDays" />
+                <span style="font-size:.82rem">day(s) at</span>
+                <input class="form-control" style="width:90px" placeholder="HH:mm"
+                       @bind="_cf.Schedule.RunAtUtc" />
+                <span style="font-size:.82rem;color:var(--text-muted)">UTC</span>
+            </div>
+        </div>
+        <div class="settings-row">
+            <label>Log Analytics Workspace ID</label>
+            <input class="form-control" style="max-width:380px"
+                   @bind="_cf.LogAnalytics!.WorkspaceId"
+                   placeholder="Optional — required for usage analysis" />
+        </div>
+        <div class="settings-row">
+            <label>Teams — Status webhook</label>
+            <input class="form-control" style="max-width:480px"
+                   placeholder="https://…"
+                   @bind="_cfTeamsStatus" />
+            <small>Sent after every scan.</small>
+        </div>
+        <div class="settings-row">
+            <label>Teams — Alerts webhook</label>
+            <input class="form-control" style="max-width:480px"
+                   placeholder="https://…"
+                   @bind="_cfTeamsAlerts" />
+            <small>Sent when expiring or critical secrets are found.</small>
+        </div>
+        <div class="settings-row">
+            <label>Teams — Errors webhook</label>
+            <input class="form-control" style="max-width:480px"
+                   placeholder="https://…"
+                   @bind="_cfTeamsErrors" />
+            <small>Sent when a scan fails.</small>
+        </div>
+        <div class="d-flex gap-2 mt-2">
+            <button class="btn btn-primary btn-sm" @onclick="SaveCloudTenantAsync" disabled="@_cloudSaving">
+                @(_cloudSaving ? "Saving…" : (_cloudEditTenantId is null ? "Add Tenant" : "Save Changes"))
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="CancelCloudForm">Cancel</button>
+        </div>
     </div>
 }
 
@@ -167,8 +264,8 @@
     </div>
 }
 
-@* ── Delete confirmation (Local Mode only) ───────────────────────────── *@
-@if (_confirmDeleteId is not null && !_isCloudMode)
+@* ── Delete confirmation (both modes) ────────────────────────────────── *@
+@if (_confirmDeleteId is not null)
 {
     var t = ViewModel.Tenants.FirstOrDefault(x => x.TenantId == _confirmDeleteId);
     <div class="aarm-form-panel" style="border-color:var(--risk-high)">
@@ -274,7 +371,7 @@ else
                         }
                         else
                         {
-                            @* Cloud Mode: trigger server-side scan + view results *@
+                            @* Cloud Mode: full CRUD + scan trigger *@
                             var isTriggeringThis = _triggeringTenantId == tenant.TenantId;
                             <button class="btn btn-sm btn-outline-primary me-1"
                                     disabled="@isTriggeringThis"
@@ -287,8 +384,12 @@ else
                                     title="View latest scan results">
                                 View
                             </button>
-                            <a href="https://portal.azure.com" target="_blank" rel="noopener"
-                               class="btn btn-sm btn-link p-0" title="Manage in Azure Portal">↗</a>
+                            <button class="btn btn-sm btn-link p-0 me-2"
+                                    title="Edit"
+                                    @onclick="() => ShowCloudEditForm(tenant)">✏</button>
+                            <button class="btn btn-sm btn-link p-0 text-danger"
+                                    title="Delete"
+                                    @onclick="() => _confirmDeleteId = tenant.TenantId">✕</button>
                         }
                     </td>
                 </tr>
@@ -318,6 +419,16 @@ else
     private bool    _isCloudMode;
     private string? _triggeringTenantId;
     private string? _scanMessage;
+
+    // ── Cloud Mode form state ─────────────────────────────────────────────────
+    private bool _showCloudForm;
+    private string? _cloudEditTenantId;
+    private CloudTenantRequest _cf = new() { LogAnalytics = new() };
+    private string _cfTeamsStatus  = "";
+    private string _cfTeamsAlerts  = "";
+    private string _cfTeamsErrors  = "";
+    private string? _cloudFormError;
+    private bool    _cloudSaving;
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
@@ -453,20 +564,15 @@ else
         var tenant = ViewModel.Tenants.FirstOrDefault(t => t.TenantId == _confirmDeleteId);
         if (tenant is not null)
         {
-            // Remove stored credentials
-            if (tenant.ClientId is not null)
-            {
-                Credentials.DeleteClientSecret(tenant.TenantId, tenant.ClientId);
-                if (tenant.Username is not null)
-                    Credentials.DeleteUserPassword(tenant.TenantId, tenant.ClientId, tenant.Username);
-            }
-
-            await TenantRepo.DeleteTenantAsync(tenant.TenantId);
+            await DataProvider.DeleteTenantAsync(tenant.TenantId);
 
             if (AppState.ActiveTenant?.TenantId == tenant.TenantId)
                 AppState.SetActiveTenant(null);
 
-            Notify.Show("Tenant removed", $"\"{tenant.DisplayName}\" has been deleted.");
+            Notify.Show("Tenant removed",
+                _isCloudMode
+                    ? $"\"{tenant.DisplayName}\" deleted. KV secret removed."
+                    : $"\"{tenant.DisplayName}\" deleted.");
         }
 
         _confirmDeleteId = null;
@@ -484,6 +590,77 @@ else
     {
         AppState.SetActiveTenant(tenant);
         Nav.NavigateTo($"/secrets/{Uri.EscapeDataString(tenant.DisplayName)}");
+    }
+
+    // ── Cloud Mode CRUD ───────────────────────────────────────────────────────
+
+    private void ShowCloudAddForm()
+    {
+        _cf = new CloudTenantRequest { LogAnalytics = new() };
+        _cfTeamsStatus = _cfTeamsAlerts = _cfTeamsErrors = "";
+        _cloudEditTenantId = null;
+        _cloudFormError    = null;
+        _showCloudForm     = true;
+    }
+
+    private void ShowCloudEditForm(TenantProfile t)
+    {
+        _cf = new CloudTenantRequest
+        {
+            TenantId          = t.TenantId,
+            TenantDisplayName = t.DisplayName,
+            AuthMode          = t.AuthMode,
+            ClientId          = t.ClientId,
+            EnvironmentName   = t.DefaultEnvironmentName ?? "default",
+            LogAnalytics      = new() { WorkspaceId = t.LogAnalyticsWorkspaceId },
+        };
+        _cfTeamsStatus = _cfTeamsAlerts = _cfTeamsErrors = "";
+        _cloudEditTenantId = t.TenantId;
+        _cloudFormError    = null;
+        _showCloudForm     = true;
+    }
+
+    private void CancelCloudForm()
+    {
+        _showCloudForm  = false;
+        _cloudFormError = null;
+    }
+
+    private async Task SaveCloudTenantAsync()
+    {
+        _cloudFormError = null;
+        if (string.IsNullOrWhiteSpace(_cf.TenantId))          { _cloudFormError = "Tenant ID is required."; return; }
+        if (string.IsNullOrWhiteSpace(_cf.TenantDisplayName)) { _cloudFormError = "Display name is required."; return; }
+        if (_cf.AuthMode == "client-secret")
+        {
+            if (string.IsNullOrWhiteSpace(_cf.ClientId)) { _cloudFormError = "Client ID is required."; return; }
+            if (_cloudEditTenantId is null && string.IsNullOrWhiteSpace(_cf.CredentialValue))
+            { _cloudFormError = "Client Secret is required for new tenants."; return; }
+        }
+
+        _cf.TeamsWebhooks = new()
+        {
+            Status  = string.IsNullOrWhiteSpace(_cfTeamsStatus)  ? null : _cfTeamsStatus,
+            Alerts  = string.IsNullOrWhiteSpace(_cfTeamsAlerts)  ? null : _cfTeamsAlerts,
+            Errors  = string.IsNullOrWhiteSpace(_cfTeamsErrors)  ? null : _cfTeamsErrors,
+        };
+
+        _cloudSaving = true;
+        try
+        {
+            TenantProfile? result = _cloudEditTenantId is null
+                ? await DataProvider.AddTenantAsync(_cf)
+                : await DataProvider.UpdateTenantAsync(_cloudEditTenantId, _cf);
+
+            Notify.Show(
+                _cloudEditTenantId is null ? "Tenant added" : "Tenant updated",
+                $"\"{_cf.TenantDisplayName}\" saved. Credential stored in Azure Key Vault.");
+
+            _showCloudForm = false;
+            await LoadAsync();
+        }
+        catch (Exception ex) { _cloudFormError = ex.Message; }
+        finally { _cloudSaving = false; }
     }
 
     private async Task TriggerCloudScanAsync(TenantProfile tenant)

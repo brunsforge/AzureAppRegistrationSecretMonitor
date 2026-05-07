@@ -64,6 +64,34 @@ public class CloudHttpDataProvider : IDataProvider
         return response.StatusCode == System.Net.HttpStatusCode.Accepted;
     }
 
+    public async Task<TenantProfile?> AddTenantAsync(CloudTenantRequest request)
+    {
+        var content = new StringContent(
+            JsonSerializer.Serialize(request, JsonOptions),
+            System.Text.Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("tenants", content);
+        response.EnsureSuccessStatusCode();
+        return JsonSerializer.Deserialize<TenantProfile>(
+            await response.Content.ReadAsStringAsync(), JsonOptions);
+    }
+
+    public async Task<TenantProfile?> UpdateTenantAsync(string tenantId, CloudTenantRequest request)
+    {
+        var content = new StringContent(
+            JsonSerializer.Serialize(request, JsonOptions),
+            System.Text.Encoding.UTF8, "application/json");
+        var response = await _http.PutAsync($"tenants/{tenantId}", content);
+        response.EnsureSuccessStatusCode();
+        return JsonSerializer.Deserialize<TenantProfile>(
+            await response.Content.ReadAsStringAsync(), JsonOptions);
+    }
+
+    public async Task<bool> DeleteTenantAsync(string tenantId)
+    {
+        var response = await _http.DeleteAsync($"tenants/{tenantId}");
+        return response.IsSuccessStatusCode;
+    }
+
     private async Task<ResultEnvelope<T>?> GetAsync<T>(string relativeUrl)
     {
         var response = await _http.GetAsync(relativeUrl);

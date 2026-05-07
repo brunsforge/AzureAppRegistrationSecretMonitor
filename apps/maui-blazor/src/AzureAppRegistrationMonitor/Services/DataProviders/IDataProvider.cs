@@ -27,7 +27,15 @@ public interface IDataProvider
     /// Cloud Mode: triggers an immediate scan on the server (POST /api/tenants/{id}/scan).
     /// Teams notifications are sent by the server according to the job configuration.
     /// Local Mode: no-op — scanning happens when GetSecretsAsync is called.
-    /// Returns true if the trigger was accepted or the no-op succeeded.
     /// </summary>
     Task<bool> TriggerScanAsync(string tenantId);
+
+    /// <summary>Adds a new tenant/job. Stores the credential in KV (Cloud) or local store (Local).</summary>
+    Task<TenantProfile?> AddTenantAsync(CloudTenantRequest request);
+
+    /// <summary>Updates an existing tenant/job. Pass null credentialValue to keep the existing credential.</summary>
+    Task<TenantProfile?> UpdateTenantAsync(string tenantId, CloudTenantRequest request);
+
+    /// <summary>Deletes a tenant/job and its stored credential.</summary>
+    Task<bool> DeleteTenantAsync(string tenantId);
 }
