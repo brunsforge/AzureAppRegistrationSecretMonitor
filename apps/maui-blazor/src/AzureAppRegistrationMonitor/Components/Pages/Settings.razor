@@ -7,6 +7,7 @@
 @inject DelegatingDataProvider DataProviderProxy
 @inject CredentialRepository CredRepo
 @inject LocalCliDataProvider LocalProvider
+@inject NavigationManager Nav
 
 <PageTitle>Settings — AARM</PageTitle>
 
@@ -117,76 +118,113 @@
     }
 </section>
 
-<!-- ── UI Preferences ────────────────────────────────────────────────────── -->
-<section class="settings-section">
-    <h2>UI Preferences</h2>
+<!-- ── UI Preferences (Local Mode only) ──────────────────────────────────── -->
+@if (SettingsSvc.Settings.AppMode != "cloud")
+{
+    <section class="settings-section">
+        <h2>UI Preferences</h2>
 
-    <div class="settings-row">
-        <label>Default tenant</label>
-        <select class="form-select" style="max-width:240px" @bind="SettingsSvc.Settings.DefaultTenant">
-            <option value="">— none —</option>
-            @foreach (var t in _tenants)
-            {
-                <option value="@t.DisplayName">@t.DisplayName</option>
-            }
-        </select>
-        <small>Pre-selected in dropdowns when the app opens.</small>
-    </div>
+        <div class="settings-row">
+            <label>Default tenant</label>
+            <select class="form-select" style="max-width:240px" @bind="SettingsSvc.Settings.DefaultTenant">
+                <option value="">— none —</option>
+                @foreach (var t in _tenants)
+                {
+                    <option value="@t.DisplayName">@t.DisplayName</option>
+                }
+            </select>
+            <small>Pre-selected in dropdowns when the app opens.</small>
+        </div>
 
-    <div class="settings-row">
-        <label>Default auth mode for new tenants</label>
-        <select class="form-select" style="max-width:240px" @bind="SettingsSvc.Settings.DefaultAuthMode">
-            <option value="interactive-browser">interactive-browser (opens browser — supports MFA)</option>
-            <option value="device-code">device-code (enter code at microsoft.com/devicelogin — supports MFA)</option>
-            <option value="azure-cli">azure-cli (reuse az login session)</option>
-            <option value="client-secret">client-secret (service principal, configure via CLI)</option>
-            <option value="username-password">username-password (no MFA — configure via CLI)</option>
-            <option value="certificate">certificate (configure via CLI)</option>
-        </select>
-        <small>Pre-selected when adding a tenant from within the UI.</small>
-    </div>
+        <div class="settings-row">
+            <label>Default auth mode for new tenants</label>
+            <select class="form-select" style="max-width:240px" @bind="SettingsSvc.Settings.DefaultAuthMode">
+                <option value="interactive-browser">interactive-browser (opens browser — supports MFA)</option>
+                <option value="device-code">device-code (enter code at microsoft.com/devicelogin — supports MFA)</option>
+                <option value="azure-cli">azure-cli (reuse az login session)</option>
+                <option value="client-secret">client-secret (service principal, configure via CLI)</option>
+                <option value="username-password">username-password (no MFA — configure via CLI)</option>
+                <option value="certificate">certificate (configure via CLI)</option>
+            </select>
+            <small>Pre-selected when adding a tenant from within the UI.</small>
+        </div>
 
-    <div class="settings-row">
-        <label>CLI path override <em>(development)</em></label>
-        <input class="form-control" style="max-width:480px"
-               placeholder="Leave empty for auto-detect — e.g. C:\...\packages\cli\dist\index.js"
-               @bind="SettingsSvc.Settings.CliPathOverride" />
-        <small>Equivalent to the <code>AARM_CLI_PATH</code> environment variable.</small>
-    </div>
+        <div class="settings-row">
+            <label>CLI path override <em>(development)</em></label>
+            <input class="form-control" style="max-width:480px"
+                   placeholder="Leave empty for auto-detect — e.g. C:\...\packages\cli\dist\index.js"
+                   @bind="SettingsSvc.Settings.CliPathOverride" />
+            <small>Equivalent to the <code>AARM_CLI_PATH</code> environment variable.</small>
+        </div>
 
-    <button class="btn btn-primary btn-sm" @onclick="SaveAsync">Save preferences</button>
-</section>
+        <button class="btn btn-primary btn-sm" @onclick="SaveAsync">Save preferences</button>
+    </section>
 
-<!-- ── Teams Notifications ────────────────────────────────────────────────── -->
-<section class="settings-section">
-    <h2>Teams Notifications</h2>
-    <p class="text-muted" style="font-size:.8rem">
-        Configure an incoming webhook URL to send secret reports or status updates to a Teams channel.
-        Create the webhook in Teams → Channel → Connectors → Incoming Webhook.
-    </p>
+    <!-- ── Teams Notifications (Local Mode — function handles this in Cloud Mode) ── -->
+    <section class="settings-section">
+        <h2>Teams Notifications</h2>
+        <p class="text-muted" style="font-size:.8rem">
+            Configure an incoming webhook URL to send secret reports or status updates to a Teams channel.
+            Create the webhook in Teams → Channel → Connectors → Incoming Webhook.
+        </p>
 
-    <div class="settings-row">
-        <label>Incoming webhook URL</label>
-        <input class="form-control" style="max-width:600px"
-               placeholder="https://…webhook.office.com/webhookb2/…"
-               @bind="SettingsSvc.Settings.TeamsWebhookUrl" />
-        <small>Leave empty to disable Teams notifications. The URL is stored in <code>~/.aarm/ui-settings.json</code>.</small>
-    </div>
+        <div class="settings-row">
+            <label>Incoming webhook URL</label>
+            <input class="form-control" style="max-width:600px"
+                   placeholder="https://…webhook.office.com/webhookb2/…"
+                   @bind="SettingsSvc.Settings.TeamsWebhookUrl" />
+            <small>Leave empty to disable. The URL is stored in <code>~/.aarm/ui-settings.json</code>.</small>
+        </div>
 
-    @if (!string.IsNullOrWhiteSpace(SettingsSvc.Settings.TeamsWebhookUrl))
-    {
-        <button class="btn btn-outline-secondary btn-sm" @onclick="TestTeamsAsync">
-            @(_testingTeams ? "Sending…" : "Test webhook")
-        </button>
-        @if (_teamsTestResult is not null)
+        @if (!string.IsNullOrWhiteSpace(SettingsSvc.Settings.TeamsWebhookUrl))
         {
-            <span class="ms-2" style="font-size:.85rem;color:@(_teamsTestOk ? "var(--color-ok)" : "var(--color-error)")">
-                @_teamsTestResult
-            </span>
+            <button class="btn btn-outline-secondary btn-sm" @onclick="TestTeamsAsync">
+                @(_testingTeams ? "Sending…" : "Test webhook")
+            </button>
+            @if (_teamsTestResult is not null)
+            {
+                <span class="ms-2" style="font-size:.85rem;color:@(_teamsTestOk ? "var(--color-ok)" : "var(--color-error)")">
+                    @_teamsTestResult
+                </span>
+            }
         }
-    }
 
-    <button class="btn btn-primary btn-sm mt-2" @onclick="SaveAsync">Save preferences</button>
+        <button class="btn btn-primary btn-sm mt-2" @onclick="SaveAsync">Save preferences</button>
+    </section>
+}
+@if (SettingsSvc.Settings.AppMode == "cloud")
+{
+    <section class="settings-section">
+        <h2>UI Preferences</h2>
+        <div class="settings-row">
+            <label>Default tenant</label>
+            <select class="form-select" style="max-width:240px" @bind="SettingsSvc.Settings.DefaultTenant">
+                <option value="">— none —</option>
+                @foreach (var t in _tenants)
+                {
+                    <option value="@t.DisplayName">@t.DisplayName</option>
+                }
+            </select>
+            <small>Pre-selected in dropdowns when the app opens.</small>
+        </div>
+        <div style="font-size:.8rem;color:var(--text-muted);margin-top:.5rem">
+            Teams notifications and CLI path settings are managed by the Azure Function in Cloud Mode.
+            Configure them in <code>jobs.json</code> on Azure Storage.
+        </div>
+        <button class="btn btn-primary btn-sm mt-2" @onclick="SaveAsync">Save preferences</button>
+    </section>
+}
+
+<!-- ── Re-run Setup ───────────────────────────────────────────────────────── -->
+<section class="settings-section" style="padding:.75rem 1rem">
+    <div class="d-flex align-items-center justify-content-between">
+        <span style="font-size:.82rem;color:var(--text-muted)">
+            Active mode: <strong>@(SettingsSvc.Settings.AppMode == "cloud" ? "☁ Cloud" : "💻 Local")</strong>
+        </span>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="RerunSetupAsync">
+            Change mode…
+        </button>
+    </div>
 </section>
 
 <!-- ── Configured Tenants ────────────────────────────────────────────────── -->
@@ -315,6 +353,13 @@
 
     private Task SelectLocalMode(ChangeEventArgs _) => OnModeChanged("local");
     private Task SelectCloudMode(ChangeEventArgs _) => OnModeChanged("cloud");
+
+    private async Task RerunSetupAsync()
+    {
+        SettingsSvc.Settings.SetupCompleted = false;
+        await SettingsSvc.SaveAsync();
+        Nav.NavigateTo("/startup");
+    }
 
     private async Task OnModeChanged(string mode)
     {

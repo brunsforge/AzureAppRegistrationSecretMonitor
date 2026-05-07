@@ -20,11 +20,24 @@ public class AppInitializationService
         _appState   = appState;
     }
 
+    /// <summary>
+    /// True when the startup setup screen must be shown before the main UI.
+    /// Conditions: first run (SetupCompleted = false), or Cloud Mode configured
+    /// without a base URI.
+    /// </summary>
+    public bool SetupRequired { get; private set; }
+
     public async Task InitializeAsync()
     {
         EnsureDirectories();
         await _settings.LoadAsync();
-        await PreSelectDefaultTenantAsync();
+
+        SetupRequired = !_settings.Settings.SetupCompleted
+                        || (_settings.Settings.AppMode == "cloud"
+                            && string.IsNullOrWhiteSpace(_settings.Settings.CloudBaseUri));
+
+        if (!SetupRequired)
+            await PreSelectDefaultTenantAsync();
     }
 
     private static void EnsureDirectories()

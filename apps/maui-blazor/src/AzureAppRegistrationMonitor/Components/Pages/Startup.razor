@@ -1,0 +1,265 @@
+@page "/startup"
+@layout AzureAppRegistrationMonitor.Components.Layout.StartupLayout
+@using AzureAppRegistrationMonitor.Services.DataProviders
+@using System.Text.Json
+@inject SettingsService SettingsSvc
+@inject CredentialRepository CredRepo
+@inject DelegatingDataProvider DataProviderProxy
+@inject LocalCliDataProvider LocalProvider
+@inject NavigationManager Nav
+
+<div class="startup-page">
+
+    <div class="startup-card">
+        <div class="startup-logo">
+            <span style="font-size:2.5rem">🔑</span>
+            <h1 style="font-size:1.4rem;font-weight:700;margin:.5rem 0 .25rem">
+                Azure App Registration Monitor
+            </h1>
+            <p style="color:var(--text-muted);font-size:.85rem;margin:0">
+                Choose how this instance connects to its data source.
+            </p>
+        </div>
+
+        <!-- ── Mode selection ──────────────────────────────────────────── -->
+        <div class="startup-modes">
+            <div class="startup-mode-btn @(_mode == "cloud" ? "active" : "")"
+                 @onclick='() => SelectMode("cloud")'>
+                <div class="startup-mode-icon">☁️</div>
+                <div class="startup-mode-label">Cloud Mode</div>
+                <div class="startup-mode-desc">
+                    Fetch data from a hosted AARM Azure Function.
+                    Best for shared deployments and scheduled scanning.
+                </div>
+            </div>
+            <div class="startup-mode-btn @(_mode == "local" ? "active" : "")"
+                 @onclick='() => SelectMode("local")'>
+                <div class="startup-mode-icon">💻</div>
+                <div class="startup-mode-label">Local Mode</div>
+                <div class="startup-mode-desc">
+                    Use the bundled CLI to scan directly from this machine.
+                    No Azure Function required.
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Cloud connection fields ────────────────────────────────── -->
+        @if (_mode == "cloud")
+        {
+            <div class="startup-cloud-fields">
+                <div class="settings-row">
+                    <label>Function base URI <span class="req">*</span></label>
+                    <input class="form-control" style="max-width:440px"
+                           placeholder="https://aarm-dev-fn.azurewebsites.net"
+                           @bind="_cloudBaseUri" />
+                </div>
+                <div class="settings-row">
+                    <label>Function key <span class="req">*</span></label>
+                    <input type="password" class="form-control" style="max-width:440px"
+                           placeholder="Paste the Azure Function default host key"
+                           @bind="_cloudFunctionKey" />
+                    <small>
+                        Find it in Azure Portal → Function App → App keys → default.<br />
+                        Stored in Windows Credential Manager — never in plain files.
+                    </small>
+                </div>
+
+                @if (_connectionError is not null)
+                {
+                    <div class="aarm-error" style="font-size:.82rem;margin-top:.5rem">
+                        @_connectionError
+                    </div>
+                }
+                @if (_connectionOk)
+                {
+                    <div style="color:var(--color-ok);font-size:.82rem;margin-top:.5rem">
+                        ✓ Connection successful — @_jobCount job(s) configured
+                    </div>
+                }
+
+                <button class="btn btn-outline-secondary btn-sm mt-2"
+                        @onclick="TestConnectionAsync"
+                        disabled="@(_testing || string.IsNullOrWhiteSpace(_cloudBaseUri) || string.IsNullOrWhiteSpace(_cloudFunctionKey))">
+                    @(_testing ? "Testing…" : "Test connection")
+                </button>
+            </div>
+        }
+
+        @if (_mode == "local")
+        {
+            <p style="font-size:.82rem;color:var(--text-muted);margin:.75rem 0">
+                The bundled CLI will be used automatically.
+                No additional configuration is required.
+            </p>
+        }
+
+        <!-- ── Continue ───────────────────────────────────────────────── -->
+        @if (_error is not null)
+        {
+            <div class="aarm-error" style="font-size:.82rem;margin-bottom:.5rem">@_error</div>
+        }
+
+        <button class="btn btn-primary mt-3"
+                style="min-width:140px"
+                @onclick="ContinueAsync"
+                disabled="@_saving">
+            @(_saving ? "Saving…" : "Continue →")
+        </button>
+    </div>
+</div>
+
+<style>
+    .startup-shell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background: var(--bg, #0f172a);
+        padding: 2rem;
+    }
+    .startup-page {
+        width: 100%;
+        max-width: 640px;
+    }
+    .startup-card {
+        background: var(--surface, #1e293b);
+        border: 1px solid var(--border, #334155);
+        border-radius: .75rem;
+        padding: 2rem;
+    }
+    .startup-logo {
+        text-align: center;
+        margin-bottom: 1.75rem;
+    }
+    .startup-modes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+    }
+    .startup-mode-btn {
+        border: 2px solid var(--border, #334155);
+        border-radius: .5rem;
+        padding: 1.25rem 1rem;
+        cursor: pointer;
+        text-align: center;
+        transition: border-color .15s, background .15s;
+        background: transparent;
+    }
+    .startup-mode-btn:hover {
+        border-color: var(--accent, #3b82f6);
+    }
+    .startup-mode-btn.active {
+        border-color: var(--accent, #3b82f6);
+        background: rgba(59,130,246,.08);
+    }
+    .startup-mode-icon { font-size: 1.8rem; margin-bottom: .4rem; }
+    .startup-mode-label { font-weight: 600; margin-bottom: .3rem; }
+    .startup-mode-desc { font-size: .78rem; color: var(--text-muted, #94a3b8); line-height: 1.4; }
+    .startup-cloud-fields { margin-bottom: 1rem; }
+</style>
+
+@code {
+    private string _mode = "cloud";
+
+    private string _cloudBaseUri    = "";
+    private string _cloudFunctionKey = "";
+
+    private bool    _testing;
+    private bool    _connectionOk;
+    private int?    _jobCount;
+    private string? _connectionError;
+
+    private bool    _saving;
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        // Pre-fill from existing settings if the user is re-visiting setup
+        _mode          = SettingsSvc.Settings.AppMode;
+        _cloudBaseUri  = SettingsSvc.Settings.CloudBaseUri ?? "";
+    }
+
+    private void SelectMode(string mode)
+    {
+        _mode = mode;
+        _connectionOk    = false;
+        _connectionError = null;
+        _error           = null;
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        _testing = true;
+        _connectionOk    = false;
+        _connectionError = null;
+        StateHasChanged();
+        try
+        {
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            http.DefaultRequestHeaders.Add("x-functions-key", _cloudFunctionKey);
+            var resp = await http.GetAsync(_cloudBaseUri.TrimEnd('/') + "/api/status");
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                _jobCount     = doc.RootElement.TryGetProperty("enabledJobCount", out var el)
+                                ? el.GetInt32() : null;
+                _connectionOk = true;
+            }
+            else
+            {
+                _connectionError = $"HTTP {(int)resp.StatusCode} — check the URI and key.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _connectionError = ex.Message;
+        }
+        finally
+        {
+            _testing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ContinueAsync()
+    {
+        _error = null;
+
+        if (_mode == "cloud")
+        {
+            if (string.IsNullOrWhiteSpace(_cloudBaseUri))
+            {
+                _error = "Function base URI is required for Cloud Mode.";
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(_cloudFunctionKey))
+            {
+                _error = "Function key is required for Cloud Mode.";
+                return;
+            }
+
+            // Save credentials and settings
+            CredRepo.SetCloudFunctionKey(_cloudFunctionKey);
+            SettingsSvc.Settings.CloudBaseUri = _cloudBaseUri;
+            SettingsSvc.Settings.AppMode      = "cloud";
+
+            // Activate Cloud Mode provider
+            DataProviderProxy.SetProvider(
+                new CloudHttpDataProvider(_cloudBaseUri, _cloudFunctionKey));
+        }
+        else
+        {
+            SettingsSvc.Settings.AppMode = "local";
+            DataProviderProxy.SetProvider(LocalProvider);
+        }
+
+        SettingsSvc.Settings.SetupCompleted = true;
+        _saving = true;
+        StateHasChanged();
+
+        await SettingsSvc.SaveAsync();
+        Nav.NavigateTo("/");
+    }
+}

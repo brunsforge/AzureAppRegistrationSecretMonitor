@@ -37,4 +37,12 @@ public class UiSettings
 
     // CloudFunctionKey is stored in Windows Credential Manager (not here) under
     // target name "aarm/cloud-function-key".
+
+    // ── Setup gate ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Set to true after the user completes the initial startup mode-selection screen.
+    /// False (default) triggers the startup screen on next launch.
+    /// </summary>
+    public bool SetupCompleted { get; set; } = false;
 }

@@ -1,10 +1,17 @@
 @inherits LayoutComponentBase
+@inject AppInitializationService InitSvc
+@inject SettingsService SettingsSvc
+@inject NavigationManager Nav
 
 <div class="aarm-layout">
     <nav class="aarm-sidebar">
         <div class="aarm-sidebar-brand">
             <span class="aarm-brand-icon">🔑</span>
             <span class="aarm-brand-name">AARM</span>
+            <span class="aarm-mode-badge"
+                  title="@(SettingsSvc.Settings.AppMode == "cloud" ? "Cloud Mode" : "Local Mode")">
+                @(SettingsSvc.Settings.AppMode == "cloud" ? "☁" : "💻")
+            </span>
         </div>
         <ul class="aarm-nav">
             <li>
@@ -52,3 +59,14 @@
         </ErrorBoundary>
     </main>
 </div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        // Yield once to let AppInitializationService.InitializeAsync() complete.
+        await Task.Yield();
+        if (InitSvc.SetupRequired && !Nav.Uri.Contains("/startup"))
+            Nav.NavigateTo("/startup", replace: true);
+    }
+}
