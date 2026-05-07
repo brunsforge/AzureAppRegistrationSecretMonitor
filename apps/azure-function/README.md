@@ -358,17 +358,29 @@ how many jobs are configured. Use this to verify a new deployment or test connec
 [
   {
     "tenantId": "<contoso-tenant-id>",
-    "environments": ["PROD"]
-  },
-  {
-    "tenantId": "<fabrikam-tenant-id>",
-    "environments": ["DEV"]
+    "displayName": "Contoso Corporation",
+    "authMode": "client-secret",
+    "clientId": "<client-id>",
+    "username": null,
+    "defaultEnvironmentName": "PROD",
+    "logAnalyticsWorkspaceId": "<workspace-id>",
+    "createdAt": "2026-05-07T06:00:00.000Z",
+    "updatedAt": "2026-05-07T06:00:00.000Z",
+    "lastPreflightAt": "2026-05-07T06:00:00.000Z",
+    "lastSuccessfulScanAt": "2026-05-07T06:00:00.000Z"
   }
 ]
 ```
 
-A tenant only appears here after at least one successful scan has written a `latest/` blob.
-If the function is freshly deployed and no scan has run yet, this returns `[]`.
+One entry per unique `tenantId`. If the same tenant has multiple jobs (different `environmentName`
+values in `jobs.json`), only the first job's metadata is returned and `defaultEnvironmentName`
+identifies the primary environment.
+
+**Design note:** MAUI has no environment selector in its UI. Environments are an internal routing
+detail of the function (they differentiate scan results in Blob Storage when the same tenant is
+scanned with different job configurations). MAUI always uses `defaultEnvironmentName` transparently.
+
+Returns `[]` if no jobs are configured yet.
 
 ---
 

@@ -112,12 +112,14 @@
                   "    var data = pm.response.json();",
                   "    pm.expect(data).to.be.an('array');",
                   "});",
-                  "// Auto-set tenantId from first result if not already set",
+                  "// Auto-set tenantId and envName from first result if not already set.",
+                  "// envName = defaultEnvironmentName (MAUI has no environment selector —",
+                  "// environments are an internal routing detail of the function).",
                   "var data = pm.response.json();",
                   "if (data.length > 0 && !pm.environment.get('tenantId')) {",
                   "    pm.environment.set('tenantId', data[0].tenantId);",
-                  "    pm.environment.set('envName', data[0].defaultEnvironmentName || 'PROD');",
-                  "    console.log('Auto-set tenantId =', data[0].tenantId);",
+                  "    pm.environment.set('envName', data[0].defaultEnvironmentName || 'default');",
+                  "    console.log('Auto-set tenantId:', data[0].tenantId, '/ envName:', data[0].defaultEnvironmentName);",
                   "}"
                 ]
               }
@@ -130,7 +132,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "tenants"]
             },
-            "description": "Returns all configured tenants as TenantProfile objects, enriched with display name, auth mode, last scan timestamp and available environment names.\n\nThe post-response script auto-sets `tenantId` and `envName` from the first result if they are not already set."
+            "description": "Returns all configured tenants as TenantProfile objects — one entry per unique tenantId. Includes display name, auth mode, last scan timestamp, and defaultEnvironmentName.\n\nNote: MAUI has no environment selector. `defaultEnvironmentName` is used transparently when calling the scan endpoints. The `/environments/{envName}/` path in scan routes is an internal routing detail of the function.\n\nThe post-response script auto-sets `tenantId` and `envName` from the first result."
           }
         }
       ]
