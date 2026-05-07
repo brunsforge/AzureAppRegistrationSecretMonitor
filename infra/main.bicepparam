@@ -6,6 +6,10 @@ using './main.bicep'
 // Get your own ID:  az ad signed-in-user show --query id -o tsv
 param keyVaultAdminObjectId = '<your-object-id>'
 
+# 'User' for a single user, 'Group' for an Entra group.
+# Use a group for shared/production setups — see infra/README.md.
+param keyVaultAdminPrincipalType = 'User'
+
 // ── Customise as needed ───────────────────────────────────────────────────────
 
 param location    = 'westeurope'

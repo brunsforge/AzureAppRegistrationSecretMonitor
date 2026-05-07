@@ -15,11 +15,15 @@ param prefix string = 'aarm'
 param environment string = 'dev'
 
 @description('''
-Object ID of the Azure AD user (or group) that should be able to manage Key Vault secrets —
-i.e. the operator who will upload job credentials.
-Get your own ID with: az ad signed-in-user show --query id -o tsv
+Object ID of the Azure AD user or group that should be able to manage Key Vault secrets.
+User ID:  az ad signed-in-user show --query id -o tsv
+Group ID: az ad group show --group "<name>" --query id -o tsv
 ''')
 param keyVaultAdminObjectId string
+
+@description('Principal type for keyVaultAdminObjectId: "User" for a single user, "Group" for an Entra group.')
+@allowed(['User', 'Group'])
+param keyVaultAdminPrincipalType string = 'User'
 
 @description('Additional tags applied to every resource.')
 param tags object = {}
@@ -145,7 +149,7 @@ resource adminKvSecretsOfficer 'Microsoft.Authorization/roleAssignments@2022-04-
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.keyVaultSecretsOfficer)
     principalId: keyVaultAdminObjectId
-    principalType: 'User'
+    principalType: keyVaultAdminPrincipalType
   }
 }
 

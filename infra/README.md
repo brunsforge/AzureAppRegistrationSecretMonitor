@@ -32,6 +32,52 @@ Deploys the complete Azure infrastructure for the AARM Azure Function.
 az group create --name aarm-dev-rg --location westeurope
 ```
 
+## keyVaultAdminObjectId — Who manages the Key Vault secrets?
+
+The Bicep template grants `Key Vault Secrets Officer` to a user or group so they can
+add/rotate the scanning credentials (client secrets for each target tenant).
+
+**Option A — your own user (simplest for solo dev/test):**
+
+```bash
+# Get your Object ID
+az ad signed-in-user show --query id -o tsv
+```
+
+Paste the result directly into `main.bicepparam`:
+```bicep
+param keyVaultAdminObjectId = '<your-object-id>'
+```
+
+**Option B — a dedicated Entra group (recommended for shared or production setups):**
+
+```bash
+# 1. Create a group in Entra
+az ad group create \
+  --display-name "AARM Key Vault Admins" \
+  --mail-nickname "aarm-kv-admins"
+
+# 2. Note the group Object ID
+GROUP_ID=$(az ad group show --group "AARM Key Vault Admins" --query id -o tsv)
+echo "Group ID: $GROUP_ID"
+
+# 3. Add yourself (or other operators) to the group
+az ad group member add \
+  --group "AARM Key Vault Admins" \
+  --member-id $(az ad signed-in-user show --query id -o tsv)
+```
+
+Then set in `main.bicepparam`:
+```bicep
+param keyVaultAdminObjectId = '<GROUP_ID>'
+```
+
+Change the `principalType` in `main.bicep` line `adminKvSecretsOfficer` from `'User'` to `'Group'`
+when using a group. Or pass it as a parameter — see the note in `main.bicep`.
+
+> **Why a group?** A group survives team changes — add/remove members in Entra without redeploying
+> the Bicep template. With a direct user ID, every team change requires re-running the deployment.
+
 ## Deploy
 
 1. Edit `main.bicepparam` — fill in your `keyVaultAdminObjectId`:
