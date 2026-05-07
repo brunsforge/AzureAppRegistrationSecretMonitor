@@ -13,27 +13,52 @@ The app lets you:
 - Store scan history locally (JSON files in `~/.aarm/history/`)
 - Stay in the background as a system tray icon when you close the window
 
-It does **not** embed Node.js or call Microsoft Graph directly. Instead it invokes the `aarm` CLI as a child process and reads its JSON output. Any tenant you configure via `aarm tenants add` appears immediately in the UI — both tools share the same `~/.aarm/tenants.json` config file.
+The app supports **two data source modes** — chosen at first launch or changed in Settings:
+
+| Mode | How data is fetched | Where credentials are stored |
+|---|---|---|
+| **Local Mode** | Invokes the bundled `aarm` CLI as a child process | Windows Credential Manager (local) |
+| **Cloud Mode** | Calls the AARM Azure Function REST API | Azure Key Vault (managed by the function) |
 
 ---
 
-## How it integrates with the CLI
+## Startup mode selection
+
+On first launch the app shows a **mode selection screen**:
+
+- **Local Mode** — no further setup required; the bundled CLI is used automatically.
+- **Cloud Mode** — enter the Azure Function base URI and function key. A test connection confirms the setup before proceeding.
+
+The selected mode is persisted. To change it later: open **Settings → Change mode…**.
+
+---
+
+## How it integrates with its data source
+
+### Local Mode
 
 ```
 MAUI Blazor UI
-    │
-    │  Process.Start("aarm", "--tenant Contoso --output json secrets expiring --days 30")
-    │
+    │  Process.Start("node aarm.mjs --tenant Contoso --output json secrets list")
     ▼
-aarm CLI (packages/cli)
-    │
-    │  Microsoft Graph API calls
-    │
-    ▼
-Microsoft Entra ID / Azure
+aarm CLI (packages/cli)  →  Microsoft Graph API  →  Microsoft Entra ID
 ```
 
-The UI calls the CLI, reads stdout, and deserialises the `ResultEnvelope<T>` JSON. No HTTP bridge or embedded Node.js runtime is required (MVP decision — see ADR-0002).
+The UI calls the CLI, reads stdout, and deserialises the `ResultEnvelope<T>` JSON.
+No HTTP bridge or embedded Node.js is required (ADR-0002).
+
+### Cloud Mode
+
+```
+MAUI Blazor UI
+    │  GET https://<fn>.azurewebsites.net/api/tenants/{id}/secrets
+    ▼
+AARM Azure Function  →  Microsoft Graph API  →  Microsoft Entra ID
+```
+
+The UI calls the Azure Function REST API. Scan results come from Azure Blob Storage;
+credentials are stored in Azure Key Vault. Adding, editing or removing tenants via the UI
+sends requests to the function API — no local credential storage is involved.
 
 ---
 
@@ -88,6 +113,8 @@ The app opens a desktop window with a sidebar navigation. The system tray icon a
 
 ### First launch checklist
 
+#### Local Mode (default)
+
 1. Make sure the `aarm` CLI is available. Test it:
    ```powershell
    aarm --version
@@ -97,12 +124,23 @@ The app opens a desktop window with a sidebar navigation. The system tray icon a
 
 2. If `aarm` is not on PATH, the app looks for `aarm.cmd` or `aarm.exe` in the same directory as its executable. You can also use `npm link` (see CLI README).
 
-3. Add at least one tenant via the CLI:
-   ```powershell
-   aarm tenants add
-   ```
+3. On first launch the mode selection screen appears. Choose **Local Mode** and click **Continue**.
 
-4. Start the app. The **Tenants** screen shows configured tenants. Click **Preflight** to check permissions, then **Scan Secrets** to load the dashboard.
+4. Add at least one tenant from the **Tenants** page (or via CLI: `aarm tenants add`).
+
+5. Click **Preflight** to check permissions, then **↻ Scan** to load the dashboard.
+
+#### Cloud Mode
+
+1. Deploy the AARM Azure Function (see `apps/azure-function/README.md` and `infra/README.md`).
+
+2. On first launch the mode selection screen appears. Choose **Cloud Mode**.
+
+3. Enter the Function base URI (e.g. `https://aarm-dev-fn.azurewebsites.net`) and the function key.
+
+4. Click **Test connection** to verify. Click **Continue** to proceed.
+
+5. Add tenants via the **Tenants** page — credentials are stored in Azure Key Vault automatically.
 
 ---
 
@@ -146,9 +184,26 @@ aarm tenants add --tenant-id <guid> --display-name "Your Tenant" --auth-mode dev
 
 ## Settings
 
-Open **AARM → Settings** from the sidebar to configure UI preferences and inspect configured tenants.
+Open **AARM → Settings** from the sidebar. The available options depend on the active mode.
 
-### CLI path override
+### Mode indicator
+
+A badge next to the brand name shows the active mode: ☁ Cloud or 💻 Local.
+Click **Change mode…** in Settings to return to the mode selection screen.
+
+### Cloud Mode settings
+
+| Setting | Description |
+|---|---|
+| Function base URI | HTTPS URL of the AARM Azure Function app |
+| Function key | Host key from Azure Portal → Function App → App keys → default. Stored in Windows Credential Manager. |
+| Test connection | Calls `/api/status` to verify connectivity and show enabled job count |
+| Diagnostics | Shows Function URI and last connection result |
+
+In Cloud Mode: Teams notifications, CLI path, and default auth mode are managed by the Azure Function
+job configuration — not in the UI.
+
+### CLI path override (Local Mode only)
 
 The **CLI path override** field tells the app where to find the `aarm` CLI when it is not installed globally or when you want to use a specific local build during development.
 
@@ -189,14 +244,23 @@ The app runs `node <path>` in place of calling `aarm` directly. Node.js must be 
 - **Default tenant** — pre-selected in all dropdowns when the app opens.
 - **Default auth mode for new tenants** — pre-selected when you add a tenant from within the UI.
 
-### Configured tenants
+### Configured tenants (Local Mode)
 
-The tenants table reflects the same `~/.aarm/tenants.json` file that the CLI writes. For non-secret auth modes (`interactive-browser`, `device-code`, `azure-cli`) you can change the auth mode directly in the UI. For modes that store a credential (`client-secret`, `username-password`, `certificate`) the credential must be reconfigured via the CLI:
+The tenants table reflects the same `~/.aarm/tenants.json` file that the CLI writes. For non-secret
+auth modes (`interactive-browser`, `device-code`, `azure-cli`) you can change the auth mode directly
+in the UI. For modes that store a credential (`client-secret`, `username-password`, `certificate`)
+the credential must be reconfigured via the CLI:
 
 ```powershell
 aarm tenants remove "Your Tenant"
 aarm tenants add --tenant-id <guid> --display-name "Your Tenant" --auth-mode client-secret --client-id <guid>
 ```
+
+### Configured tenants (Cloud Mode)
+
+The tenant list is loaded from the Azure Function `/api/tenants`. You can add, edit and delete tenants
+directly from the **Tenants** page. Credentials are sent to the function and stored in Azure Key Vault —
+nothing is stored locally in Cloud Mode.
 
 ---
 
@@ -242,15 +306,18 @@ apps/maui-blazor/src/AzureAppRegistrationMonitor/
 
 ---
 
-## Local storage
+## Local storage (Local Mode)
 
 | Location | What is stored |
 |---|---|
 | `~/.aarm/tenants.json` | Tenant profiles (shared with CLI) |
 | `~/.aarm/history/*.json` | Scan history (one file per scan) |
-| Windows Credential Manager | Client secrets (written by CLI, not by the UI) |
+| `~/.aarm/ui-settings.json` | UI preferences and active mode |
+| Windows Credential Manager | Client secrets, function key (Cloud Mode) |
 
-The UI never writes credentials. Secret key material stays in Windows Credential Manager, managed by the CLI.
+In Local Mode, secret key material is written by the CLI and never stored in plain files.
+In Cloud Mode, credentials are sent to the Azure Function API and stored in Azure Key Vault —
+no credential material is stored locally.
 
 ---
 
@@ -300,7 +367,9 @@ dotnet workload install maui-windows
 
 ## Related
 
-| Package | Description |
+| Package / App | Description |
 |---|---|
 | [`@brunsforge/azure-app-registration-monitor`](../../packages/core/README.md) | TypeScript engine library |
-| [`@brunsforge/aarm`](../../packages/cli/README.md) | CLI that this app invokes |
+| [`@brunsforge/aarm`](../../packages/cli/README.md) | CLI that this app invokes in Local Mode |
+| [AARM Azure Function](../azure-function/README.md) | Cloud scanning engine used in Cloud Mode |
+| [Bicep Infrastructure](../../infra/README.md) | Azure resources for Cloud Mode deployment |

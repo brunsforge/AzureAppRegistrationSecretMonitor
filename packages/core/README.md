@@ -189,6 +189,30 @@ const credential = createCredential({
 
 ---
 
+### Workload Identity Federation — Azure-hosted, credential-free
+
+```typescript
+const credential = createCredential({
+  mode: 'workload-identity-federation',
+  tenantId: '<target-tenant-id>',   // the tenant being scanned
+  clientId: '<app-registration-id>', // App Registration in the target tenant
+});
+// The runtime's Managed Identity (AZURE_CLIENT_ID) issues an OIDC token
+// that is exchanged for a Graph token in the target tenant.
+// Only valid when running inside Azure (Function App, VM, ACI, AKS).
+```
+
+**Precondition:** The admin of the target tenant must configure a federated credential trust on
+their App Registration, pointing to the Managed Identity of the calling Azure service.
+
+**Best for:** Azure Function deployments where no client secret should be stored. The Azure
+Function's User-Assigned Managed Identity authenticates against target tenants without any
+credential stored anywhere.
+
+**Note:** `AZURE_CLIENT_ID` must be set to the UAMI client ID in the Azure environment.
+
+---
+
 ### Username + Password — ROPC flow
 
 ```typescript

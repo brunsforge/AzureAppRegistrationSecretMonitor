@@ -105,12 +105,15 @@ az role assignment create \
 
 ### Key Vault
 
+The UAMI needs **Key Vault Secrets Officer** (not just Secrets User) so it can create, rotate and
+delete scanning credentials via the API, in addition to reading them at scan time.
+
 ```bash
 KV_ID=$(az keyvault show --name <vault-name> --query id -o tsv)
 
 az role assignment create \
   --assignee $UAMI_PRINCIPAL_ID \
-  --role "Key Vault Secrets User" \
+  --role "Key Vault Secrets Officer" \
   --scope $KV_ID
 ```
 
@@ -127,23 +130,14 @@ Configure these Application Settings on the Function App:
 | `AZURE_CLIENT_ID` | `<uami-client-id>` | Client ID of the UAMI. Used by `@azure/identity` and Flex Consumption AzureWebJobsStorage auth. |
 | `AzureWebJobsStorage__accountName` | `<storage-account-name>` | Flex Consumption: UAMI-based storage auth (no connection string needed). |
 | `AARM_STORAGE_URI` | `https://<account>.blob.core.windows.net` | Storage account URI for AARM data containers. |
+| `AARM_KEYVAULT_URI` | `https://<vault-name>.vault.azure.net` | Key Vault URI. The function reads, creates and deletes scanning credentials via SDK using this URI and the UAMI. |
 | `AARM_DASHBOARD_URL` | `https://<function-app>.azurewebsites.net/api/dashboard` | Used in Teams notification card "Open Dashboard" links. |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | `InstrumentationKey=...;IngestionEndpoint=...` | Application Insights connection string. Enables automatic log forwarding, distributed tracing and Live Metrics. Leave empty to disable (not recommended in production). |
 | `APPLICATIONINSIGHTS_ROLE_NAME` | `aarm-azure-function` | Sets the cloud role name in the Application Map. Distinguishes AARM from other services in a shared AI workspace. |
 | `FUNCTIONS_EXTENSION_VERSION` | `~4` | Required. |
 
-### Per-job scanning credentials (one per `client-secret` job)
+Add all infrastructure settings via CLI:
 
-Each App Setting holds a Key Vault reference resolved automatically by the runtime:
-
-| Setting name | Value |
-|---|---|
-| `AARM_SECRET_CONTOSO_PROD` | `@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/aarm-contoso-prod/)` |
-| `AARM_SECRET_FABRIKAM_DEV` | `@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/aarm-fabrikam-dev/)` |
-
-**Naming convention:** `AARM_SECRET_` + job `id` in UPPER_SNAKE_CASE with hyphens replaced by underscores.
-
-Add settings via CLI:
 ```bash
 az functionapp config appsettings set \
   --name <function-app-name> \
@@ -152,12 +146,31 @@ az functionapp config appsettings set \
     "AZURE_CLIENT_ID=<uami-client-id>" \
     "AzureWebJobsStorage__accountName=<storage-account-name>" \
     "AARM_STORAGE_URI=https://<account>.blob.core.windows.net" \
+    "AARM_KEYVAULT_URI=https://<vault-name>.vault.azure.net" \
     "AARM_DASHBOARD_URL=https://<fn>.azurewebsites.net/api/dashboard" \
     "APPLICATIONINSIGHTS_CONNECTION_STRING=<connection-string>" \
-    "APPLICATIONINSIGHTS_ROLE_NAME=aarm-azure-function" \
-    "AARM_SECRET_CONTOSO_PROD=@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/aarm-contoso-prod/)" \
-    "AARM_SECRET_FABRIKAM_DEV=@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/aarm-fabrikam-dev/)"
+    "APPLICATIONINSIGHTS_ROLE_NAME=aarm-azure-function"
 ```
+
+### Scanning credentials
+
+Scanning credentials (client secrets for each target tenant) are stored **directly in Key Vault** using
+the UAMI — no App Settings needed per tenant.
+
+The function reads credentials at scan time via the Key Vault SDK using `AARM_KEYVAULT_URI`.
+The naming convention for secrets is `aarm-{jobId}` (e.g. `aarm-contoso-prod`).
+
+**Recommended: use the MAUI Cloud Mode Add Tenant form.** It sends the credential to the function
+API which stores it in Key Vault automatically.
+
+**Or via Azure CLI:**
+```bash
+az keyvault secret set \
+  --vault-name <vault-name> \
+  --name aarm-contoso-prod \
+  --value "<client-secret-value>"
+```
+Then set `"credentialRef": "aarm-contoso-prod"` in `jobs.json`.
 
 ---
 
@@ -209,7 +222,7 @@ See `references/examples/jobs.json` for a complete working example with two jobs
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `id` | string | yes | Unique job identifier. Used to name the runtime state blob and the `AARM_SECRET_*` App Setting. |
+| `id` | string | yes | Unique job identifier. Used to name the runtime state blob and the Key Vault secret (`aarm-{id}`). |
 | `enabled` | boolean | yes | `false` pauses the job without removing it. The timer tick skips disabled jobs. |
 | `tenantId` | string | yes | Azure AD tenant ID (GUID) of the **target** tenant — the one being scanned. This is not the function's host tenant. |
 | `tenantDisplayName` | string | yes | Human-readable name shown in notifications and the dashboard. |
@@ -221,7 +234,7 @@ See `references/examples/jobs.json` for a complete working example with two jobs
 |---|---|---|---|
 | `authMode` | string | yes | How the function authenticates to the target tenant. See auth modes below. |
 | `clientId` | string | yes | Client ID of the App Registration **in the target tenant** that the function authenticates as. |
-| `credentialRef` | string | conditional | Name of the Function App Setting that holds the credential. Required for `client-secret` and `certificate`; omit for `workload-identity-federation`. |
+| `credentialRef` | string | conditional | Key Vault secret name holding the credential. Convention: `aarm-{jobId}`. Required for `client-secret` and `certificate`; omit for `workload-identity-federation`. |
 
 **Auth modes:**
 
@@ -320,6 +333,21 @@ Retrieve the default function key:
 az functionapp keys list --name <fn-name> --resource-group <rg>
 ```
 
+### Route overview
+
+| Method | Route | Description |
+|---|---|---|
+| GET | `/api/status` | Health check, job count, last scan time |
+| GET | `/api/tenants` | List tenants with profile data |
+| POST | `/api/tenants` | Add tenant/job + store credential in KV |
+| PUT | `/api/tenants/{tenantId}` | Update tenant/job + optional credential rotation |
+| DELETE | `/api/tenants/{tenantId}` | Delete tenant/job + purge KV secret |
+| GET | `/api/tenants/{tenantId}/secrets` | Latest secret scan (`ResultEnvelope<AppRegistrationSummary[]>`) |
+| GET | `/api/tenants/{tenantId}/preflight` | Latest preflight result |
+| POST | `/api/tenants/{tenantId}/scan` | Trigger immediate scan + send Teams notifications |
+| GET | `/api/dashboard` | Interactive HTML dashboard (client-side JS, anonymous) |
+| GET | `/api/report?tenant=&env=` | Server-rendered HTML snapshot |
+
 ---
 
 ### GET `/api/status`
@@ -384,13 +412,14 @@ Returns `[]` if no jobs are configured yet.
 
 ---
 
-### GET `/api/tenants/{tenantId}/environments/{envName}/secrets`
+### GET `/api/tenants/{tenantId}/secrets`
 
-**Purpose:** Returns the latest secret scan result for one tenant/environment as a
-`ResultEnvelope<AppRegistrationSummary[]>`. This is the primary data endpoint consumed by
+**Purpose:** Returns the latest secret scan result for a tenant as a
+`ResultEnvelope<AppRegistrationSummary[]>`. The function resolves the correct environment
+internally from the job config. This is the primary data endpoint consumed by
 the MAUI Cloud Mode and the HTML dashboard.
 
-**Path parameters:** `tenantId` (GUID), `envName` (environment slug, e.g. `PROD`)
+**Path parameters:** `tenantId` (GUID)
 
 **Response shape:**
 ```json
@@ -429,7 +458,7 @@ the MAUI Cloud Mode and the HTML dashboard.
 }
 ```
 
-**404** — returned when no scan data exists yet for this tenant/environment.
+**404** — returned when no scan data exists yet or no job is configured for this tenant.
 
 **Note for MAUI:** `LocalCliDataProvider.GetSecretsAsync` returns a **flat** `SecretSummary[]`,
 while this endpoint returns the **nested** `AppRegistrationSummary[]`. The `CloudHttpDataProvider`
@@ -437,7 +466,7 @@ flattens the response automatically before handing it to the Secret List page.
 
 ---
 
-### GET `/api/tenants/{tenantId}/environments/{envName}/preflight`
+### GET `/api/tenants/{tenantId}/preflight`
 
 **Purpose:** Returns the latest preflight/capability check result. Used by the MAUI Preflight
 Detail page in Cloud Mode to show which Graph permissions are available.
@@ -480,26 +509,69 @@ Detail page in Cloud Mode to show which Graph permissions are available.
 
 ---
 
-### POST `/api/tenants/{tenantId}/environments/{envName}/scan`
+### POST `/api/tenants/{tenantId}/scan`
 
-**Purpose:** Triggers an immediate scan for one tenant/environment outside the regular schedule.
-Useful for testing a new job config or refreshing data on demand.
+**Purpose:** Triggers an immediate scan for a tenant outside the regular schedule.
+All configured jobs for this tenant are executed. Teams notifications are sent per job config —
+identical behaviour to the scheduled timer trigger.
 
-The scan runs **asynchronously** — the endpoint returns immediately with `202 Accepted`
-and the scan continues in the background.
+The scan runs **asynchronously** — the endpoint returns immediately with `202 Accepted`.
 
 **Response (202 Accepted):**
 ```json
 {
   "accepted": true,
-  "startedAt": "2026-05-07T10:34:00.000Z"
+  "startedAt": "2026-05-07T10:34:00.000Z",
+  "jobCount": 1
 }
 ```
 
-**404** — returned when no matching job is configured in `jobs.json` for the given
-`tenantId` + `envName` combination.
+**404** — returned when no job is configured for this `tenantId` in `jobs.json`.
 
 After the scan completes, results are available at the `/secrets` and `/preflight` endpoints.
+
+---
+
+### POST `/api/tenants`
+
+**Purpose:** Adds a new tenant/job. Stores the scanning credential in Key Vault.
+Returns the created tenant profile.
+
+**Request body (JSON):**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `tenantId` | string | yes | Azure AD tenant GUID |
+| `tenantDisplayName` | string | yes | Display name for notifications and MAUI |
+| `authMode` | string | yes | `client-secret` or `workload-identity-federation` |
+| `clientId` | string | cond. | Required for `client-secret` |
+| `credentialValue` | string | cond. | Client secret value — stored in KV, never persisted |
+| `environmentName` | string | no | Defaults to `default` |
+| `schedule.intervalDays` | number | no | Default: `1` |
+| `schedule.runAtUtc` | string | no | Default: `06:00` |
+| `teamsWebhooks.*` | string | no | Optional per-channel webhook URLs |
+| `notificationThresholds.*` | number | no | Default: expiring=30, critical=7 |
+| `logAnalytics.workspaceId` | string | no | For usage analysis |
+
+**Response: 201 Created** with the TenantProfile.
+
+---
+
+### PUT `/api/tenants/{tenantId}`
+
+**Purpose:** Updates an existing tenant's job configuration. If `credentialValue` is provided,
+the Key Vault secret is rotated. Omit `credentialValue` to keep the existing credential.
+
+**Response: 200 OK** with the updated TenantProfile.
+
+---
+
+### DELETE `/api/tenants/{tenantId}`
+
+**Purpose:** Removes the tenant's job from `jobs.json`, deletes and purges the Key Vault secret,
+and preserves the runtime state blob for audit.
+
+**Response: 204 No Content**.
 
 ---
 

@@ -4,12 +4,13 @@ Monitor, analyze and manage Entra App Registration client secrets — before the
 
 ## What this is
 
-Two applications that work together:
+Three applications that work together:
 
 | Component | What it does |
 |---|---|
 | **`aarm` CLI** (`packages/cli`) | Reads App Registrations and secrets from Microsoft Graph, runs preflight capability checks, analyzes usage via Log Analytics, produces stable JSON output |
-| **MAUI Blazor UI** (`apps/maui-blazor`) | Local desktop app for Windows — invokes the CLI, shows dashboards, history, preflight results and guided rotation checklists |
+| **MAUI Blazor UI** (`apps/maui-blazor`) | Windows desktop app — supports two modes: **Local** (invokes bundled CLI) or **Cloud** (calls Azure Function API) |
+| **Azure Function** (`apps/azure-function`) | Cloud scanning engine — scheduled scans, Azure Blob Storage for results, Teams notifications, REST API for MAUI Cloud Mode and browser dashboard |
 
 ---
 
@@ -59,13 +60,18 @@ aarm preflight run --tenant "Contoso PROD"
 ```
 AzureAppRegistrationSecretMonitor/
   packages/
-    core/          # npm library  (@brunsforge/azure-app-registration-monitor)
-    cli/           # CLI binary   (aarm)
+    core/             # npm library  (@brunsforge/azure-app-registration-monitor)
+    cli/              # CLI binary   (aarm)
   apps/
-    maui-blazor/   # .NET MAUI Blazor desktop application
-  concept/         # Planning and architecture documents
-  decisions/       # Architecture Decision Records
-  references/      # Durable conventions and factual notes
+    maui-blazor/      # .NET MAUI Blazor desktop application (Local + Cloud Mode)
+    azure-function/   # Azure Function cloud scanning engine
+  infra/              # Bicep templates for Azure infrastructure deployment
+  scripts/            # Local publish and build automation (publish-local.ps1)
+  tools/
+    postman/          # Postman collection + environment for the Azure Function API
+  concept/            # Planning and architecture documents
+  decisions/          # Architecture Decision Records
+  references/         # Durable conventions and factual notes
 ```
 
 ---
