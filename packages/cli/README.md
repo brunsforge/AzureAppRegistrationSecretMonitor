@@ -39,14 +39,205 @@ Microsoft Graph API (application permissions):
 
 ## Installation
 
+### Option A — global install from npm (recommended for users)
+
 ```bash
 npm install -g @brunsforge/aarm
+aarm --version
 ```
 
-After installation, the `aarm` binary is available on your PATH:
+The binary lands at `%APPDATA%\npm\aarm.cmd` on Windows, or `/usr/local/bin/aarm` on macOS/Linux.
+
+### Option B — run from source (for contributors or if the package is not yet published)
 
 ```bash
+# 1. Clone the monorepo
+git clone https://github.com/brunsforge/AzureAppRegistrationSecretMonitor.git
+cd AzureAppRegistrationSecretMonitor
+
+# 2. Install all workspace dependencies (core + CLI)
+npm install
+
+# 3. Build the core library first, then the CLI
+npm run build --workspace packages/core
+npm run build --workspace packages/cli
+
+# 4. Make aarm available on your PATH via npm link
+cd packages/cli
+npm link
+
+# Verify
 aarm --version
+```
+
+After `npm link`, any changes you make to `packages/cli/src` are active after the next `npm run build`.
+
+If you do not want to use `npm link`, you can run the compiled script directly:
+
+```bash
+node packages/cli/dist/index.js --version
+
+# Or create a short alias in your shell profile:
+alias aarm="node $(pwd)/packages/cli/dist/index.js"
+```
+
+### Option C — run TypeScript directly without building (fastest for quick iteration)
+
+```bash
+npm install --workspace packages/cli  # already done if you ran npm install at root
+
+# Run a command directly from TypeScript source using tsx
+cd packages/cli
+npx tsx src/index.ts --version
+npx tsx src/index.ts --tenant "Contoso PROD" secrets list
+```
+
+> **tsx** (TypeScript Execute) runs `.ts` files without a compile step. It is listed as a devDependency in `packages/cli`.
+
+---
+
+## Quick local test walkthrough
+
+This walks through the full first-run experience from source checkout to seeing real secrets.
+
+### Step 1 — Prepare your App Registration
+
+Before running any `aarm` command you need an App Registration in your Entra tenant with
+the right permissions. The auth mode you choose determines which type of permission you need
+(see [Permissions and App Registration Setup](#app-registration-setup--complete-azure-portal-reference) below for the full guide).
+
+**Fastest path for a one-time test:** use `device-code` mode with a public client App Registration.
+You sign in interactively in a browser — no client secret to manage.
+
+Quick Azure Portal checklist:
+
+1. Azure Portal → **Entra ID → App registrations → New registration**
+   - Name: `aarm-test`
+   - Account type: single tenant
+   - No redirect URI needed for device-code
+2. **API permissions → Add → Microsoft Graph → Delegated → `Application.Read.All`**
+3. **Grant admin consent** (requires Global Administrator)
+4. **Authentication → Advanced settings → Allow public client flows: Yes**
+5. Copy the **Application (client) ID** — you will need it in the next step
+
+> **Do I also need a user role?** Yes for delegated (device-code / interactive-browser / azure-cli) modes.
+> The signed-in user must have **Cloud Application Administrator** or **Application Administrator** in Entra to read all App Registrations tenant-wide. A user without these roles can only see apps they own.
+
+### Step 2 — Add the tenant to aarm
+
+```bash
+aarm tenants add \
+  --tenant-id    "<your-entra-tenant-id-guid>" \
+  --display-name "My Test Tenant" \
+  --auth-mode    device-code \
+  --client-id    "<app-registration-client-id>"
+```
+
+Or run `aarm tenants add` without flags for the interactive prompt:
+
+```
+Tenant ID (GUID): xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+Display name: My Test Tenant
+Auth mode: device-code
+Client ID (App Registration GUID): xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+Log Analytics Workspace ID (optional): <Enter>
+```
+
+Verify it was saved:
+
+```bash
+aarm tenants list
+```
+
+### Step 3 — Run a preflight check
+
+Before listing secrets, confirm that the permissions are working:
+
+```bash
+aarm --tenant "My Test Tenant" preflight run
+```
+
+Expected output (all capabilities green):
+
+```
+Authentication  : OK
+Graph reachable : OK
+
+Capabilities
+┌────────────────────────────────────┬──────────────┐
+│ canReadApplications                │ [✓] Available│
+│ canReadApplicationSecrets          │ [✓] Available│
+│ canReadOwners                      │ [ ] Unavailable  ← needs Directory.Read.All
+│ ...                                │              │
+└────────────────────────────────────┴──────────────┘
+```
+
+If `canReadApplications` or `canReadApplicationSecrets` shows `[ ] Unavailable`, run:
+
+```bash
+aarm --tenant "My Test Tenant" preflight explain
+```
+
+This prints the exact steps to grant the missing permission.
+
+**Common first-run errors and fixes:**
+
+| Error | Cause | Fix |
+|---|---|---|
+| `Authentication failed: ... Application not found` | Wrong tenant ID or client ID | Double-check both GUIDs in the Azure Portal |
+| `Permission denied: Insufficient privileges` | `Application.Read.All` not granted or admin consent missing | Grant in Azure Portal → API permissions → admin consent |
+| `Permission denied: Authorization_RequestDenied` | Signed-in user lacks Entra role | Assign Cloud Application Administrator or Application Administrator |
+| Device code prompt never appears | Network / firewall blocking login.microsoft.com | Check connectivity |
+
+### Step 4 — List secrets
+
+```bash
+# All secrets, colour-coded by risk
+aarm --tenant "My Test Tenant" secrets list
+
+# Only expiring within 90 days
+aarm --tenant "My Test Tenant" secrets expiring --days 90
+
+# Already expired
+aarm --tenant "My Test Tenant" secrets expired
+
+# JSON output for automation / scripts
+aarm --tenant "My Test Tenant" secrets list --output json
+```
+
+### Step 5 — Try the apps and report commands
+
+```bash
+# Per-app risk summary
+aarm --tenant "My Test Tenant" apps list
+
+# Full tenant summary report
+aarm --tenant "My Test Tenant" report tenant-summary
+
+# Markdown report of expiring secrets (copy into a ticket or email)
+aarm --tenant "My Test Tenant" report expiring --days 30 --output markdown
+```
+
+### Step 6 — Switching to client-secret (unattended / CI use)
+
+If you want to run without interactive sign-in (CI/CD, scheduled jobs), re-add the tenant
+with `client-secret` mode. You will need a separate App Registration configured with
+**Application** permissions (not Delegated) — see the [App Registration setup guide](#app-registration-setup--complete-azure-portal-reference) for the full steps.
+
+```bash
+# Remove the device-code tenant first
+aarm tenants remove "My Test Tenant"
+
+# Re-add with client-secret
+aarm tenants add \
+  --tenant-id    "<tenant-id>" \
+  --display-name "My Test Tenant" \
+  --auth-mode    client-secret \
+  --client-id    "<daemon-app-client-id>"
+# → aarm prompts for the client secret (stored in Windows Credential Manager)
+
+# Run without any browser prompt
+aarm --tenant "My Test Tenant" secrets list
 ```
 
 ---
