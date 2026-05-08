@@ -123,7 +123,6 @@ export function registerReportCommand(program: Command): void {
           );
         } else {
           process.stdout.write(`\nTenant Summary — ${chalk.bold(ctx.tenantId)}\n`);
-          process.stdout.write(`Environment  : ${ctx.environmentName}\n`);
           process.stdout.write(`Generated at : ${summary.generatedAt}\n\n`);
           process.stdout.write(`App Registrations : ${summary.appCount}\n`);
           process.stdout.write(`Total secrets     : ${summary.secretCount}\n`);

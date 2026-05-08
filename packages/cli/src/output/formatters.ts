@@ -75,12 +75,12 @@ export function printAppsTable(apps: AppRegistrationSummary[]): void {
 export function secretsToMarkdown(
   secrets: SecretSummary[],
   tenantId: string,
-  envName: string,
+  _envName?: string,
 ): string {
   const lines: string[] = [
     `# Secret Expiry Report`,
     ``,
-    `**Tenant:** ${tenantId}  **Environment:** ${envName}  **Generated:** ${new Date().toISOString().slice(0, 10)}`,
+    `**Tenant:** ${tenantId}  **Generated:** ${new Date().toISOString().slice(0, 10)}`,
     ``,
     `| Risk | App | Secret | Key ID | Expires | Days | Status |`,
     `|------|-----|--------|--------|---------|------|--------|`,

@@ -15,7 +15,6 @@ program
   .description('Azure App Registration Monitor — inspect and track Entra client secrets')
   .version('0.1.0', '-V, --version', 'Print version')
   .option('--tenant <name-or-id>', 'Tenant display name or ID from local config')
-  .option('--environment <name>', 'Environment name (for future use)')
   .option('--config-dir <path>', 'Override default config directory (~/.aarm)')
   .option('--output <format>', 'Output format: table, json', 'table')
   .option('--verbose', 'Enable verbose output', false)

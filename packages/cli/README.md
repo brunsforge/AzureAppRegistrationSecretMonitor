@@ -600,7 +600,6 @@ These options apply to all commands:
 | Option | Description | Default |
 |---|---|---|
 | `--tenant <name-or-id>` | Tenant display name or tenant ID to operate on | — |
-| `--environment <name>` | Environment name (reserved for future use) | — |
 | `--config-dir <path>` | Override the config directory | `~/.aarm` |
 | `--output <format>` | Output format: `table`, `json` | `table` |
 | `--verbose` | Enable verbose/debug output | `false` |

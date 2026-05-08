@@ -26,6 +26,9 @@ export interface GlobalOptions {
   output: string;
   verbose: boolean;
   color: boolean;
+  // Note: environment is not a CLI concept (each tenant has exactly one Graph API).
+  // The environmentName field in context/output is always 'default' and exists
+  // for compatibility with the ResultEnvelope JSON schema used by MAUI and Azure Function.
 }
 
 export interface CommandContext {

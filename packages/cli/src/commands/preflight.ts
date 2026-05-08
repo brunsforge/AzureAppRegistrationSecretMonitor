@@ -19,7 +19,6 @@ function tick(value: boolean): string {
 
 function printPreflightTable(result: PreflightResult): void {
   process.stdout.write(`\nPreflight — ${chalk.bold(result.tenantId)}\n`);
-  process.stdout.write(`Environment : ${result.environmentName}\n`);
   process.stdout.write(`Checked at  : ${result.checkedAt}\n\n`);
 
   const statusTable = new Table({ style: { compact: true } });
