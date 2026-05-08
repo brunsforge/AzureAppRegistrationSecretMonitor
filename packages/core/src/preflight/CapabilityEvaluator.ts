@@ -29,12 +29,22 @@ export class CapabilityEvaluator {
     const missing: string[] = [];
     const warnings: string[] = [];
 
+    /**
+     * Record a capability check outcome.
+     * required=true  → failure adds to missingPermissions (blocks core functionality)
+     * required=false → failure adds to warnings (optional feature unavailable)
+     */
     const record = <K extends keyof Omit<CapabilitySet, 'canQueryLogAnalytics' | 'canAnalyzeServicePrincipalSignIns'>>(
       key: K,
       outcome: CheckOutcome,
+      required = false,
     ): boolean => {
       if (!outcome.value && outcome.missingPermissionHint) {
-        missing.push(outcome.missingPermissionHint);
+        if (required) {
+          missing.push(outcome.missingPermissionHint);
+        } else {
+          warnings.push(`Optional capability unavailable: ${outcome.missingPermissionHint}`);
+        }
       }
       if (outcome.warning) warnings.push(outcome.warning);
       return outcome.value;
@@ -102,11 +112,11 @@ export class CapabilityEvaluator {
 
     return {
       capabilities: {
-        canReadApplications: record('canReadApplications', appsOutcome),
-        canReadApplicationSecrets: record('canReadApplicationSecrets', secretsOutcome),
-        canReadServicePrincipals: record('canReadServicePrincipals', spOutcome),
-        canReadOwners: record('canReadOwners', ownersOutcome),
-        canReadDirectory: record('canReadDirectory', dirOutcome),
+        canReadApplications:       record('canReadApplications',       appsOutcome,    true),
+        canReadApplicationSecrets: record('canReadApplicationSecrets', secretsOutcome, true),
+        canReadServicePrincipals:  record('canReadServicePrincipals',  spOutcome,      false),
+        canReadOwners:             record('canReadOwners',             ownersOutcome,  false),
+        canReadDirectory:          record('canReadDirectory',          dirOutcome,     false),
         canCreateApplicationSecrets: false,
         canDeleteApplicationSecrets: false,
         canCreateApplications: false,
