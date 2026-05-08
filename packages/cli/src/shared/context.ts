@@ -1,6 +1,8 @@
 import {
   AuthError,
   ConfigError,
+  GraphError,
+  PermissionError,
   createCredential,
   createGraphClient,
   GraphApplicationReader,
@@ -109,6 +111,14 @@ export async function buildContext(opts: GlobalOptions): Promise<CommandContext>
     };
   } else if (tenant.authMode === 'azure-cli') {
     authConfig = { mode: 'azure-cli', tenantId: tenant.tenantId };
+  } else if (tenant.authMode === 'workload-identity-federation') {
+    process.stderr.write(
+      `Error: The "workload-identity-federation" auth mode requires an Azure-hosted runtime\n` +
+      `(Function App, VM, ACI) and cannot be used with the aarm CLI.\n` +
+      `For unattended automation use "client-secret" or "certificate".\n` +
+      `For interactive use on a developer workstation use "device-code".\n`,
+    );
+    process.exit(EXIT.CONFIG_INVALID);
   } else {
     if (!tenant.clientId) {
       process.stderr.write(`Error: Tenant "${tenant.displayName}" has no client ID configured.\n`);
@@ -148,7 +158,22 @@ export async function buildContext(opts: GlobalOptions): Promise<CommandContext>
 export function handleError(err: unknown): never {
   if (err instanceof AuthError) {
     process.stderr.write(`Authentication failed: ${err.message}\n`);
+    process.stderr.write(
+      'Check: correct tenant ID, client ID, secret value, and that the App Registration exists.\n',
+    );
     process.exit(EXIT.AUTH_FAILED);
+  }
+  if (err instanceof PermissionError) {
+    process.stderr.write(`Permission denied: ${err.message}\n`);
+    process.stderr.write(
+      'Check: Application.Read.All is in API permissions AND admin consent has been granted.\n' +
+      'Run "aarm --tenant <name> preflight explain" for detailed grant instructions.\n',
+    );
+    process.exit(EXIT.PERMISSION_MISSING);
+  }
+  if (err instanceof GraphError) {
+    process.stderr.write(`Graph API error: ${err.message}\n`);
+    process.exit(EXIT.ERROR);
   }
   if (err instanceof ConfigError) {
     process.stderr.write(`Configuration error: ${err.message}\n`);

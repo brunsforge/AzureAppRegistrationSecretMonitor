@@ -100,6 +100,9 @@ This section is critical. Picking the wrong mode causes the "az command not avai
 | `interactive-browser` | Your Entra user account (browser redirect) | **Yes** | No | Yes | Desktop tools with localhost redirect |
 | `certificate` | Service principal | N/A | No | Yes | High-security automated deployments |
 | `azure-cli` | Reuses existing `az login` session | **Yes** | **Yes** | No | Developers who already use Azure CLI |
+| `workload-identity-federation` | Managed Identity (Azure-hosted only) | N/A | No | Yes | **Not supported in the CLI.** Azure Function / VM only. |
+
+> **`workload-identity-federation` is supported by the underlying library (`@brunsforge/azure-app-registration-monitor`) and by the AARM Azure Function, but it requires an Azure-hosted runtime (Function App, VM, ACI, AKS) and cannot be used with the `aarm` CLI on a developer workstation. Use `client-secret` or `certificate` for unattended automation, or `device-code` for interactive local use.
 
 > **If you just got "az command not available":** your tenant is configured as `azure-cli` but the Azure CLI is not installed. Remove the tenant and re-add it with `device-code` or `username-password`.
 
@@ -467,23 +470,6 @@ aarm tenants remove "Contoso DEV"
 aarm tenants remove "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 ```
 
-#### `aarm tenants validate`
-
-Authenticates and runs a preflight check against the tenant. Reports auth status, Graph reachability, and any missing permissions. Outputs the same information as `preflight run` but as a short pass/fail summary.
-
-```bash
-aarm --tenant "Contoso PROD" tenants validate
-```
-
-Output:
-```
-Validating tenant xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx...
-✓ Tenant "Contoso PROD" is valid.
-  Auth: OK  |  Graph: reachable
-  Warnings:
-    • Delegated permission missing or user role missing: Application.Read.All ...
-```
-
 ---
 
 ### `aarm preflight`
@@ -678,6 +664,119 @@ List only secrets that are already expired.
 ```bash
 aarm --tenant "Contoso PROD" secrets expired
 aarm --tenant "Contoso PROD" secrets expired --output json
+```
+
+---
+
+### `aarm usage`
+
+Analyze secret usage via Azure Monitor / Log Analytics. Requires a Log Analytics workspace with
+`AADServicePrincipalSignInLogs` enabled. Configure the workspace ID when adding a tenant with
+`aarm tenants add --workspace-id <id>`.
+
+All subcommands accept `--days <n>` (default 90) to set the look-back window.
+
+#### `aarm usage analyze`
+
+Show overall sign-in activity for an App Registration over the look-back period.
+
+```bash
+aarm --tenant "Contoso PROD" usage analyze --app-id  "<client-id>"
+aarm --tenant "Contoso PROD" usage analyze --app-name "CRM Connector"
+aarm --tenant "Contoso PROD" usage analyze --app-name "CRM Connector" --days 30
+aarm --tenant "Contoso PROD" usage analyze --app-id "<client-id>" --output json
+```
+
+| Option | Description |
+|---|---|
+| `--app-id <id>` | App Registration client ID (one of `--app-id` or `--app-name` is required) |
+| `--app-name <name>` | App Registration display name (resolved via Graph) |
+| `--days <n>` | Look-back window in days (default: 90) |
+
+Output shows total, successful, and failed sign-in counts, broken down by service principal and source IP.
+
+#### `aarm usage analyze-secret`
+
+Show activity broken down per secret key ID — useful to identify which specific credential is used.
+
+```bash
+aarm --tenant "Contoso PROD" usage analyze-secret --app-id "<client-id>"
+aarm --tenant "Contoso PROD" usage analyze-secret --app-name "CRM Connector" --days 14
+```
+
+#### `aarm usage last-seen`
+
+Show when each secret key ID was last used (last successful sign-in timestamp).
+
+```bash
+aarm --tenant "Contoso PROD" usage last-seen --app-id "<client-id>"
+```
+
+Output includes `lastSeenAt` per key ID, making it easy to identify credentials that are still actively used before rotating them.
+
+#### `aarm usage rotation-check`
+
+After rotating a secret, verify that the old key ID has stopped appearing in sign-in logs.
+
+```bash
+aarm --tenant "Contoso PROD" usage rotation-check --app-id "<client-id>" --days 7
+```
+
+Returns non-zero if the old credential is still seen within the look-back window.
+
+---
+
+### `aarm report`
+
+Generate reports from the current secret inventory. Report commands perform a full inventory scan and then format the output for human consumption or automation.
+
+All subcommands accept `--output <format>` with values `table` (default), `json`, `markdown`, or `csv`.
+
+#### `aarm report expiring`
+
+Report all secrets expiring within a configurable window, sorted by days remaining.
+
+```bash
+aarm --tenant "Contoso PROD" report expiring
+aarm --tenant "Contoso PROD" report expiring --days 30
+aarm --tenant "Contoso PROD" report expiring --output markdown
+aarm --tenant "Contoso PROD" report expiring --output csv
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--days <n>` | `30` | Report secrets expiring within `n` days |
+
+#### `aarm report tenant-summary`
+
+High-level summary of the entire tenant: total apps, total secrets, risk distribution.
+
+```bash
+aarm --tenant "Contoso PROD" report tenant-summary
+aarm --tenant "Contoso PROD" report tenant-summary --output json
+```
+
+#### `aarm report findings`
+
+Report all secrets at or above a minimum risk level.
+
+```bash
+aarm --tenant "Contoso PROD" report findings
+aarm --tenant "Contoso PROD" report findings --min-risk high
+aarm --tenant "Contoso PROD" report findings --min-risk critical --output json
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--min-risk <level>` | `medium` | Minimum risk level: `info`, `low`, `medium`, `high`, `critical` |
+
+#### `aarm report rotation-guide`
+
+Produce a rotation checklist for all secrets expiring within the look-back window.
+
+```bash
+aarm --tenant "Contoso PROD" report rotation-guide
+aarm --tenant "Contoso PROD" report rotation-guide --days 14 --output markdown
 ```
 
 ---

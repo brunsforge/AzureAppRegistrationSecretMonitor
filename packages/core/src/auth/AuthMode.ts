@@ -4,4 +4,5 @@ export type AuthMode =
   | 'interactive-browser'
   | 'certificate'
   | 'azure-cli'
-  | 'username-password';
+  | 'username-password'
+  | 'workload-identity-federation';
