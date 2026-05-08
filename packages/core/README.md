@@ -63,9 +63,238 @@ The library calls `useIdentityPlugin(cachePersistencePlugin)` internally when th
 
 ---
 
-## Quickstart
+## Quick Project Setup
+
+If you are trying the library for the first time, here is the fastest way to get a working test script:
+
+```bash
+mkdir aarm-test && cd aarm-test
+npm init -y
+npm pkg set type="module"
+
+# Library
+npm install @brunsforge/azure-app-registration-monitor
+
+# Helpers
+npm install dotenv                # load .env files into process.env
+npm install --save-dev tsx        # run TypeScript directly without a compile step
+```
+
+Create `.env` in the project root (never commit this file):
+
+```
+AARM_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+AARM_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+AARM_CLIENT_SECRET=your-client-secret-value
+```
+
+Add `.env` to `.gitignore`:
+
+```bash
+echo ".env" >> .gitignore
+```
+
+Create `test.ts`:
 
 ```typescript
+import 'dotenv/config'; // must be the first import — loads .env into process.env
+
+import {
+  createCredential,
+  createGraphClient,
+  GraphApplicationReader,
+  SecretInventoryService,
+} from '@brunsforge/azure-app-registration-monitor';
+
+const credential = createCredential({
+  mode: 'client-secret',
+  tenantId: process.env.AARM_TENANT_ID!,
+  clientId: process.env.AARM_CLIENT_ID!,
+  clientSecret: process.env.AARM_CLIENT_SECRET!,
+});
+
+const graphClient = createGraphClient(credential);
+const reader      = new GraphApplicationReader(graphClient);
+const inventory   = new SecretInventoryService(reader);
+
+const apps = await inventory.getInventory();
+console.log(`Found ${apps.length} App Registrations`);
+apps
+  .flatMap(a => a.secrets)
+  .filter(s => s.riskLevel !== 'None')
+  .forEach(s => console.log(`  ${s.appDisplayName}: ${s.status} (${s.daysUntilExpiry}d)`));
+```
+
+Run:
+
+```bash
+npx tsx test.ts
+```
+
+---
+
+## Permissions and App Registration Setup
+
+The required App Registration configuration depends entirely on the auth mode you choose.
+This is the most common source of errors when first trying the library.
+
+### Permission types — Application vs Delegated
+
+| Auth mode | Identity in the token | Permission type | What it means |
+|---|---|---|---|
+| `client-secret` | App / Service Principal | **Application** | The app reads tenant-wide, independently of any user |
+| `certificate` | App / Service Principal | **Application** | Same as client-secret |
+| `workload-identity-federation` | App / Service Principal | **Application** | Same as client-secret |
+| `device-code` | Signed-in user | **Delegated** | The app reads on behalf of the user — the user's own permissions apply |
+| `interactive-browser` | Signed-in user | **Delegated** | Same as device-code |
+| `username-password` | Signed-in user | **Delegated** | Same as device-code |
+| `azure-cli` | User from `az login` | **Delegated** | Same as device-code |
+
+**Key difference:**
+- **Application permission:** the app is trusted by an admin to read the entire tenant, no user required.
+- **Delegated permission:** the app reads on behalf of the signed-in user, and the user must themselves have sufficient Entra role (e.g. `Global Reader`, `Cloud Application Administrator`, or `Application Administrator`).
+
+### Required permissions per scenario
+
+| Scenario | Recommended mode | Graph permission | Token content |
+|---|---|---|---|
+| Azure Function, CI/CD, scheduled job | `client-secret` or `certificate` or `workload-identity-federation` | `Application.Read.All` (Application) | `roles: ["Application.Read.All"]` |
+| Developer testing with personal account | `device-code`, `interactive-browser`, or `azure-cli` | `Application.Read.All` (Delegated) | `scp: "Application.Read.All"` + user must have Entra role |
+| Owner enrichment (optional) | any | `Directory.Read.All` (same type as above) | — |
+
+### App Registration setup per mode
+
+#### `client-secret` / `certificate`
+
+1. Create an App Registration in the target tenant (Azure Portal → Entra ID → App registrations → New registration).
+2. **API permissions → Add permission → Microsoft Graph → Application permissions → `Application.Read.All`.**
+3. Click **Grant admin consent** (requires Global Administrator or Privileged Role Administrator).
+4. For `client-secret`: create a client secret (Certificates & secrets → New client secret).
+5. For `certificate`: upload a certificate public key.
+
+The App Registration does **not** need a redirect URI for these modes.
+
+#### `device-code` / `interactive-browser` / `username-password`
+
+1. Create an App Registration.
+2. **API permissions → Add permission → Microsoft Graph → Delegated permissions → `Application.Read.All`.**
+3. Click **Grant admin consent** (required even for delegated permissions to allow the permission to be used).
+4. **Authentication → Platform configurations:**
+   - For `device-code`: no redirect URI needed. Enable **Allow public client flows**.
+   - For `interactive-browser`: add `http://localhost` as a redirect URI under **Mobile and desktop applications**.
+   - For `username-password`: Enable **Allow public client flows**.
+5. The signed-in user must have an Entra role with read access to applications, e.g.:
+   - `Global Reader`
+   - `Cloud Application Administrator`
+   - `Application Administrator`
+
+> **Why does admin consent apply even to delegated permissions?**  
+> `Application.Read.All` is a high-privilege permission. Microsoft requires admin consent before
+> any user — regardless of their own role — can use the delegated grant.
+
+#### `workload-identity-federation`
+
+This is the most complex setup but requires no stored credential:
+
+1. The **calling** Azure service (Function App, ACI, etc.) must have a **User-Assigned Managed Identity** with `AZURE_CLIENT_ID` set.
+2. Create an App Registration in the **target** tenant (the one being scanned).
+3. Grant `Application.Read.All` with admin consent — same as `client-secret`.
+4. In the App Registration → **Certificates & secrets → Federated credentials → Add credential**:
+   - **Scenario:** Other issuer
+   - **Issuer:** `https://login.microsoftonline.com/<host-tenant-id>/v2.0`
+   - **Subject identifier:** the UAMI's `objectId` (not client ID)
+   - **Audience:** `api://AzureADTokenExchange`
+5. This allows the UAMI's OIDC token to be exchanged for a Graph token in the target tenant.
+
+> **Tip:** To test this locally you need an Azure-hosted runtime (VM, ACI, or Function App). It cannot be tested from a developer machine without mocking the OIDC exchange.
+
+#### `azure-cli`
+
+No App Registration needed. The library reuses the `az login` token cache.
+
+```bash
+az login --tenant <tenant-id>
+```
+
+The signed-in account must have a suitable Entra role (same list as device-code above).
+
+---
+
+## Error Handling
+
+The most common errors when first using the library are missing permissions and misconfigured
+App Registrations. Always wrap calls in try/catch and handle these specifically:
+
+```typescript
+import {
+  createCredential, createGraphClient, GraphApplicationReader, SecretInventoryService,
+  AuthError, PermissionError, GraphError,
+} from '@brunsforge/azure-app-registration-monitor';
+import 'dotenv/config';
+
+async function run() {
+  const credential = createCredential({
+    mode: 'client-secret',
+    tenantId: process.env.AARM_TENANT_ID!,
+    clientId: process.env.AARM_CLIENT_ID!,
+    clientSecret: process.env.AARM_CLIENT_SECRET!,
+  });
+
+  try {
+    const graphClient = createGraphClient(credential);
+    const apps = await new SecretInventoryService(
+      new GraphApplicationReader(graphClient)
+    ).getInventory();
+    console.log(`OK — ${apps.length} App Registrations`);
+  }
+  catch (err) {
+    if (err instanceof AuthError) {
+      // Token could not be acquired — wrong client secret, expired secret,
+      // wrong tenant ID, or network issue.
+      console.error('Authentication failed:', err.message);
+      console.error('Check: correct tenant ID, client ID, and secret value.');
+    }
+    else if (err instanceof PermissionError) {
+      // Token was acquired but Graph returned 403 Forbidden.
+      // Most common cause: Application.Read.All not granted or admin consent missing.
+      console.error('Permission denied:', err.message);
+      console.error('Check: Application.Read.All is in API permissions AND admin consent is granted.');
+    }
+    else if (err instanceof GraphError) {
+      // Graph API returned an error (4xx / 5xx other than 403).
+      console.error('Graph API error:', err.message);
+    }
+    else {
+      throw err; // unexpected — rethrow
+    }
+  }
+}
+
+run();
+```
+
+### Common errors and their causes
+
+| Error / Message | Cause | Fix |
+|---|---|---|
+| `AuthError: ClientSecretCredential authentication failed` | Wrong client secret value or secret expired | Check the secret value; rotate if expired |
+| `AuthError: Application not found in directory` | Wrong `tenantId` or `clientId` | Verify both GUIDs |
+| `PermissionError: 403 Insufficient privileges` | `Application.Read.All` not granted or admin consent missing | Grant permission + admin consent in Azure Portal |
+| `PermissionError: 403 Authorization_RequestDenied` | Delegated mode: signed-in user lacks Entra role | Assign `Global Reader` or similar role to the user |
+| `GraphError: 401 Unauthorized` | Token expired mid-request (rare) | Retry; the SDK refreshes tokens automatically |
+| `TypeError: Cannot read properties of undefined` | `process.env.AARM_*` is undefined | Add `import 'dotenv/config'` as the **first** import; check `.env` file exists |
+
+---
+
+## Quickstart
+
+> **New to this library?** See [Quick Project Setup](#quick-project-setup) below for a step-by-step
+> guide on setting up a test project, loading environment variables with `dotenv`, and configuring
+> your App Registration correctly for the auth mode you want to use.
+
+```typescript
+import 'dotenv/config'; // must be the first import — loads .env into process.env
+
 import {
   createCredential,
   createGraphClient,
@@ -76,11 +305,12 @@ import {
 } from '@brunsforge/azure-app-registration-monitor';
 
 // 1. Create a credential (client-secret auth)
+//    AARM_CLIENT_SECRET must be in your .env file (never hardcode secrets)
 const credential = createCredential({
   mode: 'client-secret',
-  tenantId: '<your-tenant-id>',
-  clientId: '<your-app-client-id>',
-  clientSecret: process.env.AARM_CLIENT_SECRET!, // load from env or OS credential store
+  tenantId: process.env.AARM_TENANT_ID!,
+  clientId: process.env.AARM_CLIENT_ID!,
+  clientSecret: process.env.AARM_CLIENT_SECRET!,
 });
 
 // 2. Create a Graph client
@@ -112,11 +342,13 @@ console.log(envelopeToJson(envelope));
 ### Client Secret — service-to-service, unattended
 
 ```typescript
+import 'dotenv/config'; // load .env → process.env
+
 const credential = createCredential({
   mode: 'client-secret',
-  tenantId: '<tenant-id>',
-  clientId: '<client-id>',
-  clientSecret: process.env.AARM_CLIENT_SECRET!, // never hardcode
+  tenantId: process.env.AARM_TENANT_ID!,
+  clientId: process.env.AARM_CLIENT_ID!,
+  clientSecret: process.env.AARM_CLIENT_SECRET!, // never hardcode — use .env or a secret store
 });
 ```
 
@@ -221,7 +453,7 @@ const credential = createCredential({
   tenantId: '<tenant-id>',
   clientId: '<client-id>',  // App Registration with "Allow public client flows" enabled
   username: 'user@contoso.com',
-  password: process.env.AARM_USER_PASSWORD!,
+  password: process.env.AARM_USER_PASSWORD!, // load via dotenv — never hardcode
 });
 ```
 
