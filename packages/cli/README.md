@@ -1115,19 +1115,60 @@ aarm preflight explain
 
 ## Configuration directory
 
-By default, `aarm` stores tenant profiles in `~/.aarm/` (Linux/macOS) or `%USERPROFILE%\.aarm\` (Windows).
+By default, `aarm` stores all files under `~/.aarm/`:
+
+| Platform | Path |
+|---|---|
+| Windows | `C:\Users\<you>\.aarm\` |
+| macOS | `/Users/<you>/.aarm/` |
+| Linux | `/home/<you>/.aarm/` |
+
+### Directory layout
 
 ```
 ~/.aarm/
-  tenants.json     ← non-sensitive tenant profiles
+  tenants.json                                 ← tenant profiles (non-sensitive)
+                                                  shared with the AARM MAUI desktop app
+
+  history/
+    {tenantId}/
+      {environmentName}/
+        secrets-2026-05-08T06-00-00-000Z.json  ← secrets scan result (SecretSummary[])
+        preflight-2026-05-08T06-00-00-000Z.json ← preflight result (PreflightResult)
 ```
 
-Client secrets are stored separately in the OS credential store (Windows Credential Manager on Windows). They are never written to `tenants.json`.
+**Retention:** up to **50 files per slot** (tenantId + environmentName + type). Older files are pruned automatically after each scan.
 
-Override the directory:
+**File naming:** ISO 8601 timestamp with `:` and `.` replaced by `-` so filenames are valid on Windows.
+
+**`environmentName`** defaults to `default`. Special characters are replaced with `_`.
+
+### What is NOT stored here
+
+Client secrets, user passwords, and the MAUI Cloud Mode function key are **never written to JSON files**. They are stored in the **OS credential store**:
+
+| Platform | Credential store |
+|---|---|
+| Windows | Windows Credential Manager (`advapi32.dll` — same store as the MAUI app via P/Invoke) |
+| macOS | macOS Keychain |
+| Linux | libsecret / GNOME Keyring |
+
+The MAUI app uses the exact same credential store with a compatible key format, so credentials configured via `aarm tenants add` are immediately available to the desktop app and vice versa.
+
+### Override the config directory
+
+Use `--config-dir` to point to a different directory — useful in CI/CD pipelines or when running multiple isolated configurations:
 
 ```bash
-aarm --config-dir /etc/aarm --tenant "Contoso PROD" secrets list
+# CI/CD: use a pipeline-specific config directory
+aarm --config-dir /tmp/aarm-ci --tenant "Contoso PROD" secrets list
+
+# Multiple environments side by side
+aarm --config-dir ~/.aarm-staging --tenant "Contoso Staging" secrets list
+
+# Or set the environment variable (applies to all commands in the shell session)
+export AARM_CONFIG_DIR=/opt/aarm-config
+aarm --tenant "Contoso PROD" secrets list
 ```
 
 ---
