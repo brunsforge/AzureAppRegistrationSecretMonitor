@@ -1132,16 +1132,19 @@ By default, `aarm` stores all files under `~/.aarm/`:
 
   history/
     {tenantId}/
-      {environmentName}/
+      default/
         secrets-2026-05-08T06-00-00-000Z.json  ← secrets scan result (SecretSummary[])
         preflight-2026-05-08T06-00-00-000Z.json ← preflight result (PreflightResult)
 ```
 
-**Retention:** up to **50 files per slot** (tenantId + environmentName + type). Older files are pruned automatically after each scan.
+The `default/` subfolder is always named `default` in CLI use. An Azure tenant has exactly one
+Graph API and therefore one set of App Registrations and secrets — there are no separate
+"environments" per tenant at the CLI level. The `default` layer exists because the CLI shares its
+storage format with the AARM Azure Function, which can have multiple scan jobs per tenant.
+
+**Retention:** up to **50 files per slot** (tenantId + type). Older files are pruned automatically after each scan.
 
 **File naming:** ISO 8601 timestamp with `:` and `.` replaced by `-` so filenames are valid on Windows.
-
-**`environmentName`** defaults to `default`. Special characters are replaced with `_`.
 
 ### What is NOT stored here
 
