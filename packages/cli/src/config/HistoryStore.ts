@@ -12,14 +12,9 @@ export class HistoryStore {
    * Persist a scan or preflight result.
    * Failures are silently swallowed — history is a side effect, never a blocker.
    */
-  async save(
-    type: HistoryType,
-    tenantId: string,
-    envName: string,
-    data: unknown,
-  ): Promise<void> {
+  async save(type: HistoryType, tenantId: string, data: unknown): Promise<void> {
     try {
-      const dir = this.slotDir(tenantId, envName);
+      const dir = this.slotDir(tenantId);
       await mkdir(dir, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
       await writeFile(join(dir, `${type}-${ts}.json`), JSON.stringify(data, null, 2), 'utf8');
@@ -33,13 +28,9 @@ export class HistoryStore {
    * Load the most recent saved result for the given type.
    * Returns null if no history exists or on any read error.
    */
-  async loadLatest<T>(
-    type: HistoryType,
-    tenantId: string,
-    envName: string,
-  ): Promise<T | null> {
+  async loadLatest<T>(type: HistoryType, tenantId: string): Promise<T | null> {
     try {
-      const dir = this.slotDir(tenantId, envName);
+      const dir = this.slotDir(tenantId);
       const files = await this.listFiles(type, dir);
       if (files.length === 0) return null;
       const raw = await readFile(join(dir, files[files.length - 1]), 'utf8');
@@ -49,9 +40,8 @@ export class HistoryStore {
     }
   }
 
-  private slotDir(tenantId: string, envName: string): string {
-    const safeEnv = (envName || 'default').replace(/[^a-zA-Z0-9_-]/g, '_');
-    return join(this.configDir, 'history', tenantId, safeEnv);
+  private slotDir(tenantId: string): string {
+    return join(this.configDir, 'history', tenantId);
   }
 
   private async listFiles(type: HistoryType, dir: string): Promise<string[]> {

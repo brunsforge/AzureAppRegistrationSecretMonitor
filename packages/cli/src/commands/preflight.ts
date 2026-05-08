@@ -94,7 +94,7 @@ export function registerPreflightCommand(program: Command): void {
 
         // Auto-save preflight result to history
         const history = new HistoryStore(ctx.configStore.getConfigDir());
-        void history.save('preflight', ctx.tenantId, ctx.environmentName, result);
+        void history.save('preflight', ctx.tenantId, result);
 
         // Update lastPreflightAt on the tenant profile
         void ctx.configStore.upsertTenant({
@@ -136,8 +136,7 @@ export function registerPreflightCommand(program: Command): void {
         process.exit(1);
       }
       const history = new HistoryStore(store.getConfigDir());
-      const envName = tenant.defaultEnvironmentName ?? 'default';
-      const cached = await history.loadLatest<PreflightResult>('preflight', tenant.tenantId, envName);
+      const cached = await history.loadLatest<PreflightResult>('preflight', tenant.tenantId);
       if (!cached) {
         process.stderr.write(
           chalk.dim('No cached preflight result. Run "aarm preflight run --tenant <name>" first.\n'),
@@ -146,7 +145,7 @@ export function registerPreflightCommand(program: Command): void {
       }
       if (opts.output === 'json') {
         process.stdout.write(
-          envelopeToJson(createResultEnvelope(cached, tenant.tenantId, envName)) + '\n',
+          envelopeToJson(createResultEnvelope(cached, tenant.tenantId, tenant.defaultEnvironmentName ?? 'default')) + '\n',
         );
       } else {
         process.stderr.write(chalk.dim(`Showing cached result from ${cached.checkedAt}\n\n`));

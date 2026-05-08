@@ -4,9 +4,8 @@ using AzureAppRegistrationMonitor.Models;
 namespace AzureAppRegistrationMonitor.Services;
 
 /// <summary>
-/// Persists scan results as JSON files in ~/.aarm/history/.
+/// Persists scan results as JSON files in ~/.aarm/history/{tenantId}/.
 /// Phase 1 (MVP) storage — SQLite is planned for Phase 2 (ADR-0004).
-/// Each scan is stored as a dated JSON file per tenant/environment.
 /// </summary>
 public class HistoryRepository
 {
@@ -16,29 +15,28 @@ public class HistoryRepository
         WriteIndented = true,
     };
 
-    private readonly string _historyDir;
+    private readonly string _historyRoot;
 
     public HistoryRepository()
     {
-        _historyDir = Path.Combine(
+        _historyRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".aarm", "history");
     }
 
     public async Task SaveScanAsync(
         string tenantId,
-        string environmentName,
         IReadOnlyList<AppRegistrationSummary> apps)
     {
-        Directory.CreateDirectory(_historyDir);
+        var dir = Path.Combine(_historyRoot, tenantId);
+        Directory.CreateDirectory(dir);
 
         var timestamp = DateTimeOffset.UtcNow;
-        var fileName = $"{tenantId}_{environmentName}_{timestamp:yyyyMMddHHmmss}.json";
-        var filePath = Path.Combine(_historyDir, fileName);
+        var fileName = $"apps-{timestamp:yyyyMMddHHmmss}.json";
+        var filePath = Path.Combine(dir, fileName);
 
         var entry = new ScanHistoryEntry(
             TenantId: tenantId,
-            EnvironmentName: environmentName,
             ScannedAt: timestamp.ToString("O"),
             AppCount: apps.Count,
             SecretCount: apps.Sum(a => a.SecretCount),
@@ -46,20 +44,18 @@ public class HistoryRepository
             ExpiringCount: apps.Sum(a => a.ExpiringSecretCount),
             Apps: apps);
 
-        var json = JsonSerializer.Serialize(entry, JsonOptions);
-        await File.WriteAllTextAsync(filePath, json);
+        await File.WriteAllTextAsync(filePath, JsonSerializer.Serialize(entry, JsonOptions));
     }
 
     public async Task<IReadOnlyList<ScanHistoryEntry>> GetHistoryAsync(
         string tenantId,
-        string environmentName,
         int maxEntries = 30)
     {
-        if (!Directory.Exists(_historyDir))
+        var dir = Path.Combine(_historyRoot, tenantId);
+        if (!Directory.Exists(dir))
             return Array.Empty<ScanHistoryEntry>();
 
-        var prefix = $"{tenantId}_{environmentName}_";
-        var files = Directory.GetFiles(_historyDir, $"{prefix}*.json")
+        var files = Directory.GetFiles(dir, "apps-*.json")
                              .OrderByDescending(f => f)
                              .Take(maxEntries);
 
@@ -81,7 +77,6 @@ public class HistoryRepository
 
 public record ScanHistoryEntry(
     string TenantId,
-    string EnvironmentName,
     string ScannedAt,
     int AppCount,
     int SecretCount,

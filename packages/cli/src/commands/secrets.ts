@@ -31,7 +31,7 @@ export function registerSecretsCommand(program: Command): void {
 
         // Auto-save history — side effect, failures are swallowed inside HistoryStore
         const history = new HistoryStore(ctx.configStore.getConfigDir());
-        void history.save('secrets', ctx.tenantId, ctx.environmentName, envelope);
+        void history.save('secrets', ctx.tenantId, envelope);
 
         // Update lastSuccessfulScanAt on the tenant profile
         void ctx.configStore.upsertTenant({

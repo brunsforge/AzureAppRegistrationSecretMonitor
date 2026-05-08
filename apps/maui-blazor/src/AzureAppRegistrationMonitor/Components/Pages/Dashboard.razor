@@ -174,8 +174,7 @@ else
         var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
         if (tenant is null) return;
 
-        var history = await HistoryRepo.GetHistoryAsync(
-            tenant.TenantId, tenant.DefaultEnvironmentName ?? "default", maxEntries: 1);
+        var history = await HistoryRepo.GetHistoryAsync(tenant.TenantId, maxEntries: 1);
 
         if (history.Count > 0)
         {
@@ -203,7 +202,7 @@ else
             ComputeStats();
 
             if (tenant is not null)
-                await HistoryRepo.SaveScanAsync(tenant.TenantId, tenant.DefaultEnvironmentName ?? "default", _apps);
+                await HistoryRepo.SaveScanAsync(tenant.TenantId, _apps);
 
             await SettingsSvc.RecordScanAsync(_selectedTenant);
         }

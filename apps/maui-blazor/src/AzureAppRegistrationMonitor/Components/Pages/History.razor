@@ -129,8 +129,7 @@ else
         {
             var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
             if (tenant is null) { _error = $"Tenant \"{_selectedTenant}\" not found."; return; }
-            var entries = await HistoryRepo.GetHistoryAsync(
-                tenant.TenantId, tenant.DefaultEnvironmentName ?? "default");
+            var entries = await HistoryRepo.GetHistoryAsync(tenant.TenantId);
             _history = entries.ToList();
         }
         catch (Exception ex) { _error = ex.Message; }
