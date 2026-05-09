@@ -8,7 +8,7 @@ export interface JobConfig {
   environmentName: string;
   authMode: JobAuthMode;
   clientId: string;
-  /** App Setting env var name (e.g. AARM_SECRET_CONTOSO_PROD). Omit for workload-identity-federation. */
+  /** Key Vault secret name (e.g. aarm-contoso-prod). Omit for workload-identity-federation. */
   credentialRef?: string;
   schedule: {
     intervalDays: number;

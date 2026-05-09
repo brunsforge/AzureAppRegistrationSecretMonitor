@@ -32,24 +32,15 @@ public class LocalCliDataProvider : IDataProvider
 
     public Task<ResultEnvelope<List<SecretSummary>>?> GetSecretsAsync(
         string tenantId, string? environmentName = null)
-    {
-        var args = WithEnv(new[] { "secrets", "list" }, environmentName);
-        return _cli.RunAsync<List<SecretSummary>>(tenantId, args);
-    }
+        => _cli.RunAsync<List<SecretSummary>>(tenantId, ["secrets", "list"]);
 
     public Task<ResultEnvelope<List<AppRegistrationSummary>>?> GetAppsAsync(
         string tenantId, string? environmentName = null)
-    {
-        var args = WithEnv(new[] { "apps", "list" }, environmentName);
-        return _cli.RunAsync<List<AppRegistrationSummary>>(tenantId, args);
-    }
+        => _cli.RunAsync<List<AppRegistrationSummary>>(tenantId, ["apps", "list"]);
 
     public Task<ResultEnvelope<PreflightResult>?> GetPreflightAsync(
         string tenantId, string? environmentName = null)
-    {
-        var args = WithEnv(new[] { "preflight", "run" }, environmentName);
-        return _cli.RunAsync<PreflightResult>(tenantId, args);
-    }
+        => _cli.RunAsync<PreflightResult>(tenantId, ["preflight", "run"]);
 
     // Local Mode: scan happens on GetSecretsAsync — no separate trigger needed.
     public Task<bool> TriggerScanAsync(string tenantId) => Task.FromResult(true);
@@ -101,6 +92,4 @@ public class LocalCliDataProvider : IDataProvider
         return true;
     }
 
-    private static string[] WithEnv(string[] baseArgs, string? env) =>
-        env is null ? baseArgs : [.. baseArgs, "--env", env];
 }

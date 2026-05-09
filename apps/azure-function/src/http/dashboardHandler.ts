@@ -7,16 +7,15 @@ app.http('dashboard', {
   authLevel: 'anonymous',
   handler: async (req: HttpRequest): Promise<HttpResponseInit> => {
     const selectedTenant = req.query.get('tenant') ?? '';
-    const selectedEnv = req.query.get('env') ?? '';
     return {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      body: buildDashboardHtml(selectedTenant, selectedEnv),
+      body: buildDashboardHtml(selectedTenant),
     };
   },
 });
 
-function buildDashboardHtml(initialTenant: string, initialEnv: string): string {
+function buildDashboardHtml(initialTenant: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -54,7 +53,6 @@ function buildDashboardHtml(initialTenant: string, initialEnv: string): string {
 <h1>Azure App Registration Monitor</h1>
 <div class="controls">
   <select id="tenantSel"></select>
-  <select id="envSel"></select>
   <button onclick="load()">Refresh</button>
 </div>
 <div id="status">Loading…</div>
@@ -65,41 +63,32 @@ function buildDashboardHtml(initialTenant: string, initialEnv: string): string {
 
 <script>
 const BASE = '';
-let tenants = [];
+const INITIAL_TENANT = ${JSON.stringify(initialTenant)};
 
 async function init() {
-  const r = await fetch(BASE+'/api/tenants', {headers:{'x-functions-key':getKey()}}).catch(()=>null);
+  const key = getKey();
+  if (!key) { setStatus('Enter your function key to continue.'); return; }
+  const r = await fetch(BASE+'/api/tenants', {headers:{'x-functions-key':key}}).catch(()=>null);
   if(!r||!r.ok){setStatus('Could not load tenants — check function key');return;}
-  tenants = await r.json();
+  const tenants = await r.json();
   const sel = document.getElementById('tenantSel');
-  sel.innerHTML = tenants.map(t=>'<option value="'+t.tenantId+'">'+t.tenantId+'</option>').join('');
-  const params = new URLSearchParams(location.search);
-  if(params.get('tenant')) sel.value = params.get('tenant');
-  sel.onchange = () => { fillEnvs(); load(); };
-  fillEnvs();
-  if(params.get('env')) document.getElementById('envSel').value = params.get('env');
+  sel.innerHTML = tenants.map(t=>'<option value="'+esc(t.tenantId)+'">'+esc(t.displayName||t.tenantId)+'</option>').join('');
+  if(INITIAL_TENANT) sel.value = INITIAL_TENANT;
+  sel.onchange = load;
   load();
-}
-
-function fillEnvs() {
-  const tid = document.getElementById('tenantSel').value;
-  const t = tenants.find(x=>x.tenantId===tid);
-  const envSel = document.getElementById('envSel');
-  envSel.innerHTML = (t?.environments||[]).map(e=>'<option>'+e+'</option>').join('');
-  envSel.onchange = load;
 }
 
 async function load() {
   const tid = document.getElementById('tenantSel').value;
-  const env = document.getElementById('envSel').value;
-  if(!tid||!env){setStatus('Select a tenant and environment');return;}
+  if(!tid){setStatus('Select a tenant');return;}
   setStatus('Loading…');
-  const r = await fetch(BASE+'/api/tenants/'+tid+'/environments/'+env+'/secrets',
+  const r = await fetch(BASE+'/api/tenants/'+encodeURIComponent(tid)+'/secrets',
     {headers:{'x-functions-key':getKey()}}).catch(()=>null);
-  if(!r||!r.ok){setStatus('No data — run a scan first');render([]);return;}
-  const {data,metadata} = await r.json();
-  setStatus('Last scan: '+(metadata?.generatedAt||'unknown'));
-  render(data||[]);
+  if(!r||!r.ok){setStatus('No scan data available — trigger a scan first');render([]);return;}
+  const envelope = await r.json();
+  const apps = envelope.data || [];
+  setStatus('Last scan: '+(envelope.metadata?.generatedAt||'unknown'));
+  render(apps);
 }
 
 function render(apps) {
@@ -123,7 +112,11 @@ function render(apps) {
 function card(n,label,cls){return'<div class="card '+cls+'"><div class="n">'+n+'</div><div class="l">'+label+'</div></div>';}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 function setStatus(t){document.getElementById('status').textContent=t;}
-function getKey(){return localStorage.getItem('aarm_fn_key')||prompt('Function key:')||'';}
+function getKey(){
+  let k=localStorage.getItem('aarm_fn_key');
+  if(!k){k=prompt('Paste your Azure Function key:');if(k)localStorage.setItem('aarm_fn_key',k);}
+  return k||'';
+}
 
 init();
 </script>
