@@ -1,6 +1,6 @@
 {
   "name": "@brunsforge/azure-app-registration-monitor",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Monitor and analyse Microsoft Entra App Registration client secrets — read-only monitoring library for Node.js",
   "license": "MIT",
   "type": "module",
