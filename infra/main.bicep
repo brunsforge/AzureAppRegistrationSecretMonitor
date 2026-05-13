@@ -23,7 +23,7 @@ param keyVaultAdminObjectId string
 
 @description('Principal type for keyVaultAdminObjectId: "User" for a single user, "Group" for an Entra group.')
 @allowed(['User', 'Group'])
-param keyVaultAdminPrincipalType string = 'User'
+param keyVaultAdminPrincipalType string = 'Group'
 
 @description('Additional tags applied to every resource.')
 param tags object = {}
@@ -39,21 +39,21 @@ var commonTags = union(tags, {
 var storageAccountName = toLower(take('${prefix}${environment}${uniqueString(resourceGroup().id)}', 24))
 
 var names = {
-  uami:     '${prefix}-${environment}-identity'
-  storage:  storageAccountName
-  kv:       '${prefix}-${environment}-kv'
-  law:      '${prefix}-${environment}-law'
-  ai:       '${prefix}-${environment}-ai'
-  plan:     '${prefix}-${environment}-plan'
-  fn:       '${prefix}-${environment}-fn'
+  uami: '${prefix}-${environment}-identity'
+  storage: storageAccountName
+  kv: '${prefix}-${environment}-kv'
+  law: '${prefix}-${environment}-law'
+  ai: '${prefix}-${environment}-ai'
+  plan: '${prefix}-${environment}-plan'
+  fn: '${prefix}-${environment}-fn'
 }
 
 // ── Well-known Azure built-in role definition IDs ─────────────────────────────
 
 var roles = {
   storageBlobDataContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
-  keyVaultSecretsUser:        '4633458b-17de-408a-b874-0445c86b69e6'
-  keyVaultSecretsOfficer:     'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
+  keyVaultSecretsUser: '4633458b-17de-408a-b874-0445c86b69e6'
+  keyVaultSecretsOfficer: 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
 }
 
 // ── User-Assigned Managed Identity ───────────────────────────────────────────
@@ -99,7 +99,10 @@ resource uamiStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   name: guid(storage.id, uami.id, roles.storageBlobDataContributor)
   scope: storage
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.storageBlobDataContributor)
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      roles.storageBlobDataContributor
+    )
     principalId: uami.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -231,7 +234,7 @@ resource fn 'Microsoft.Web/sites@2023-12-01' = {
       scaleAndConcurrency: {
         maximumInstanceCount: 40
         instanceMemoryMB: 2048
-        alwaysReadyInstances: [
+        alwaysReady: [
           // Keep one warm instance for the timer trigger to avoid cold-start delays.
           {
             name: 'function:aarmScheduleTrigger'
@@ -279,7 +282,7 @@ resource fn 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'AARM_DASHBOARD_URL'
-          value: 'https://${fn.name}.azurewebsites.net/api/dashboard'
+          value: 'https://${names.fn}.azurewebsites.net/api/dashboard'
         }
         // ── Application Insights ──────────────────────────────────────────────
         {
@@ -294,10 +297,6 @@ resource fn 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
           value: '~4'
-        }
-        {
-          name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'node'
         }
       ]
     }
