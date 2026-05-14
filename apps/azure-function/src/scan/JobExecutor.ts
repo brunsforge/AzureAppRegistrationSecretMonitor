@@ -12,6 +12,7 @@ import {
   type PreflightResult,
 } from '@brunsforge/azure-app-registration-monitor';
 import type { JobConfig } from '../types/JobConfig.js';
+import { getResultStore } from '../storage/stores.js';
 
 export interface JobScanResult {
   secretsEnvelope: ResultEnvelope<AppRegistrationSummary[]>;
@@ -23,23 +24,37 @@ export async function executeJob(job: JobConfig): Promise<JobScanResult> {
   const credential = await resolveCredential(job);
   const graphClient = createGraphClient(credential);
 
-  const [preflightResult, inventory] = await Promise.all([
-    new PreflightService(graphClient, credential).run({
-      tenantId: job.tenantId,
-      authMode: job.authMode as 'client-secret',
-      logAnalyticsWorkspaceId: job.logAnalytics?.workspaceId ?? undefined,
-    }),
-    new SecretInventoryService(new GraphApplicationReader(graphClient)).getInventory({
-      includeOwners: true,
-    }),
-  ]);
+  // Run preflight first and save it immediately — so it is always persisted
+  // even if the subsequent inventory scan fails (e.g. wrong credentials).
+  const preflightResult = await new PreflightService(graphClient, credential).run({
+    tenantId: job.tenantId,
+    authMode: job.authMode as 'client-secret',
+    logAnalyticsWorkspaceId: job.logAnalytics?.workspaceId ?? undefined,
+  });
+
+  const preflightEnvelope = createResultEnvelope(preflightResult, job.tenantId, {
+    errors:   preflightResult.errors,
+    warnings: preflightResult.warnings,
+  });
+
+  // Persist preflight before attempting inventory — auth errors become visible immediately.
+  await getResultStore().savePreflight(job.tenantId, preflightEnvelope);
+
+  // If auth failed, stop here — no point querying Graph for inventory.
+  if (!preflightResult.authValid) {
+    const emptyEnvelope = createResultEnvelope([] as AppRegistrationSummary[], job.tenantId, {
+      errors: preflightResult.errors,
+    });
+    return { secretsEnvelope: emptyEnvelope, preflightEnvelope, secretCount: 0 };
+  }
+
+  const inventory = await new SecretInventoryService(
+    new GraphApplicationReader(graphClient),
+  ).getInventory({ includeOwners: true });
 
   return {
     secretsEnvelope: createResultEnvelope(inventory, job.tenantId),
-    preflightEnvelope: createResultEnvelope(preflightResult, job.tenantId, {
-      errors: preflightResult.errors,
-      warnings: preflightResult.warnings,
-    }),
+    preflightEnvelope,
     secretCount: inventory.reduce((sum, app) => sum + app.secretCount, 0),
   };
 }

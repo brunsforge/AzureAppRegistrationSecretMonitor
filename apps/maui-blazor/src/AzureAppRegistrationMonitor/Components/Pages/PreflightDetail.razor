@@ -244,10 +244,17 @@ else
                 StateHasChanged();
 
                 // Poll up to 90s for the preflight result to appear
+                // The Azure Function saves preflight before inventory, so auth errors appear quickly.
                 var deadline = DateTime.UtcNow.AddSeconds(90);
+                int attempt = 0;
                 while (DateTime.UtcNow < deadline)
                 {
-                    await Task.Delay(4000);
+                    await Task.Delay(3000);
+                    attempt++;
+                    _progressLines.Clear();
+                    _progressLines.Add($"Polling for result… attempt {attempt}");
+                    StateHasChanged();
+
                     var env = await DataProvider.GetPreflightAsync(tenantId, null);
                     if (env?.Data is not null)
                     {
@@ -256,7 +263,7 @@ else
                     }
                 }
                 if (_result is null)
-                    _error = "Scan triggered but no preflight result available after 90s. Check App Insights for errors.";
+                    _error = "No preflight result after 90s. The scan may have failed — check the Tenants page for error notifications or App Insights for details.";
             }
             else
             {
