@@ -190,8 +190,8 @@ resource ai 'Microsoft.Insights/components@2020-02-02' = {
 }
 
 // ── Azure Communication Services — Email ──────────────────────────────────────
-// Optional: only used when mail targets are configured in jobs.json.
-// The UAMI needs the "Azure Communication Email Sender" role on the domain resource.
+// Optional: only used when mailTargets are configured in jobs.json.
+// Auth: connection string stored in Key Vault (no RBAC role needed).
 
 resource acsEmail 'Microsoft.Communication/emailServices@2023-06-01-preview' = {
   name: names.acsEmail
@@ -221,15 +221,12 @@ resource acsComm 'Microsoft.Communication/communicationServices@2023-06-01-previ
   }
 }
 
-// UAMI — Azure Communication Email Sender role (send mails on behalf of the domain)
-var acsEmailSenderRoleId = '13c37bcd-7901-4843-8640-cde88c83ae2a'
-resource uamiAcsEmailSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acsDomain.id, uami.id, acsEmailSenderRoleId)
-  scope: acsDomain
+// Store ACS connection string in Key Vault — referenced via KV reference App Setting.
+resource acsConnSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'aarm-acs-connection'
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acsEmailSenderRoleId)
-    principalId: uami.properties.principalId
-    principalType: 'ServicePrincipal'
+    value: listKeys(acsComm.id, '2023-06-01-preview').primaryConnectionString
   }
 }
 
@@ -341,12 +338,12 @@ resource fn 'Microsoft.Web/sites@2023-12-01' = {
         }
         // ── ACS Email (optional — only active when mailTargets are configured) ──
         {
-          name: 'AARM_ACS_ENDPOINT'
-          value: acsComm.properties.hostName != null ? 'https://${acsComm.properties.hostName}' : ''
+          name: 'AARM_ACS_CONNECTION_STRING'
+          value: '@Microsoft.KeyVault(VaultName=${kv.name};SecretName=aarm-acs-connection)'
         }
         {
           name: 'AARM_ACS_SENDER_EMAIL'
-          value: 'DoNotReply@${acsDomain.properties.fromSenderDomain}'
+          value: 'DoNotReply@${acsDomain.properties.mailFromSenderDomain}'
         }
         // ── Functions runtime ─────────────────────────────────────────────────
         {
@@ -387,8 +384,5 @@ output logAnalyticsWorkspaceId string = law.id
 @description('Application Insights connection string — already set as App Setting; shown here for reference.')
 output appInsightsConnectionString string = ai.properties.ConnectionString
 
-@description('ACS Communication Services endpoint — set as AARM_ACS_ENDPOINT App Setting.')
-output acsEndpoint string = 'https://${acsComm.properties.hostName}'
-
 @description('ACS sender email address — set as AARM_ACS_SENDER_EMAIL App Setting.')
-output acsSenderEmail string = 'DoNotReply@${acsDomain.properties.fromSenderDomain}'
+output acsSenderEmail string = 'DoNotReply@${acsDomain.properties.mailFromSenderDomain}'

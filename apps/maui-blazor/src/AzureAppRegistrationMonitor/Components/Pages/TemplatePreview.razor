@@ -1,7 +1,7 @@
 @page "/template-preview"
-@using AzureAppRegistrationMonitor.Services.DataProviders
 @inject SettingsService SettingsSvc
-@inject IDataProvider DataProvider
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <PageTitle>Template Preview — AARM</PageTitle>
 
@@ -9,92 +9,218 @@
     <h1>Template Preview</h1>
 </div>
 
-<p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem">
-    Preview built-in notification templates with demo data.
-    Custom blob templates (from <code>aarm-config/templates/</code>) can be tested by
-    triggering a manual scan with test credentials.
+<p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1.25rem">
+    Preview built-in notification templates. One aggregated notification per scan event —
+    never per individual secret.
+    <a href="#notification-flow" style="color:var(--accent)">See notification flow ↓</a>
 </p>
 
-<div class="d-flex gap-3 mb-3 flex-wrap">
+@* ── Controls ──────────────────────────────────────────────────────────────── *@
+<div class="d-flex gap-3 mb-3 flex-wrap align-items-end">
     <div>
-        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.25rem">Template type</label>
-        <select class="form-select" style="max-width:220px" @bind="_selectedTemplate">
-            <option value="teams-critical">Teams — Critical</option>
-            <option value="teams-expiring">Teams — Expiring</option>
-            <option value="teams-summary">Teams — Summary</option>
-            <option value="teams-error">Teams — Error</option>
-            <option value="mail-critical">Email — Critical</option>
-            <option value="mail-expiring">Email — Expiring</option>
-            <option value="mail-summary">Email — Summary</option>
-            <option value="mail-error">Email — Error</option>
+        <label class="form-label" style="font-size:.78rem;font-weight:600">Template</label>
+        <select class="form-select form-select-sm" style="max-width:240px"
+                @bind="_selectedTemplate" @bind:after="OnTemplateChanged">
+            <optgroup label="Teams — Adaptive Cards">
+                <option value="teams-critical">Teams — Critical</option>
+                <option value="teams-expiring">Teams — Expiring</option>
+                <option value="teams-summary">Teams — Summary</option>
+                <option value="teams-error">Teams — Error</option>
+            </optgroup>
+            <optgroup label="Email — HTML">
+                <option value="mail-critical">Email — Critical</option>
+                <option value="mail-expiring">Email — Expiring</option>
+                <option value="mail-summary">Email — Summary</option>
+                <option value="mail-error">Email — Error</option>
+            </optgroup>
         </select>
     </div>
+
     <div>
-        <label style="font-size:.82rem;font-weight:600;display:block;margin-bottom:.25rem">Demo data</label>
-        <div class="d-flex gap-2 flex-wrap" style="font-size:.82rem">
-            <input class="form-control form-control-sm" style="width:200px"
-                   placeholder="Tenant name" @bind="_demoTenant" />
-            <input type="number" class="form-control form-control-sm" style="width:80px"
-                   placeholder="Total" @bind="_demoTotal" />
-            <input type="number" class="form-control form-control-sm" style="width:80px"
-                   placeholder="Expiring" @bind="_demoExpiring" />
-            <input type="number" class="form-control form-control-sm" style="width:80px"
-                   placeholder="Critical" @bind="_demoCritical" />
+        <label class="form-label" style="font-size:.78rem;font-weight:600">Data</label>
+        <div class="btn-group btn-group-sm">
+            <button class="btn @(_showTestData ? "btn-outline-secondary" : "btn-primary")"
+                    @onclick='() => SetData(false)'>With markers</button>
+            <button class="btn @(_showTestData ? "btn-primary" : "btn-outline-secondary")"
+                    @onclick='() => SetData(true)'>With test data</button>
         </div>
     </div>
+
+    @if (_isTeams)
+    {
+        <div>
+            <label class="form-label" style="font-size:.78rem;font-weight:600">View</label>
+            <div class="btn-group btn-group-sm">
+                <button class="btn @(_viewMode == "json" ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick='() => SetView("json")'>JSON</button>
+                <button class="btn @(_viewMode == "rendered" ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick='() => SetView("rendered")'>Rendered card</button>
+            </div>
+        </div>
+    }
 </div>
 
-@if (_selectedTemplate.StartsWith("teams-"))
+@* ── Demo data inputs ──────────────────────────────────────────────────────── *@
+@if (_showTestData)
 {
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:.5rem;padding:1.25rem;margin-bottom:1rem">
-        <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.75rem;font-weight:600">
-            ADAPTIVE CARD PREVIEW (JSON sent to Teams Incoming Webhook)
-        </div>
-        <pre style="background:#0f172a;padding:1rem;border-radius:.375rem;overflow:auto;font-size:.78rem;color:#e2e8f0;max-height:500px">@GetTeamsJson()</pre>
-    </div>
-    <div style="font-size:.78rem;color:var(--text-muted)">
-        Test this card at
-        <a href="https://adaptivecards.io/designer/" target="_blank" rel="noopener" style="color:var(--accent)">
-            adaptivecards.io/designer ↗
-        </a>
-        — paste the <code>content</code> object from the JSON above.
-    </div>
-}
-else
-{
-    <div style="border:1px solid var(--border);border-radius:.5rem;overflow:hidden">
-        <div style="background:var(--surface);padding:.5rem 1rem;font-size:.75rem;
-                    color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--border)">
-            EMAIL PREVIEW (HTML rendered in browser)
-        </div>
-        <iframe style="width:100%;height:540px;border:none;background:#fff"
-                srcdoc="@GetMailHtml()"></iframe>
+    <div class="d-flex gap-2 flex-wrap mb-3" style="font-size:.82rem;align-items:center">
+        <span style="color:var(--text-muted)">Demo:</span>
+        <input class="form-control form-control-sm" style="width:200px"
+               placeholder="Tenant name" @bind="_demoTenant" @bind:after="OnDataChanged" />
+        <input type="number" class="form-control form-control-sm" style="width:75px"
+               title="Total secrets" @bind="_demoTotal" @bind:after="OnDataChanged" />
+        <input type="number" class="form-control form-control-sm" style="width:75px"
+               title="Expiring" @bind="_demoExpiring" @bind:after="OnDataChanged" />
+        <input type="number" class="form-control form-control-sm" style="width:75px"
+               title="Critical" @bind="_demoCritical" @bind:after="OnDataChanged" />
+        <span style="color:var(--text-muted);font-size:.75rem">total / expiring / critical</span>
     </div>
 }
 
-<div style="margin-top:1.5rem;padding:1rem;background:var(--surface);border:1px solid var(--border);
-            border-radius:.5rem;font-size:.82rem">
-    <strong>Handlebars placeholders available in custom templates:</strong>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.25rem .75rem;margin-top:.5rem;color:var(--text-muted)">
-        <code>{{tenantDisplayName}}</code>
-        <code>{{scanTimestamp}}</code>
-        <code>{{secretCount}}</code>
-        <code>{{expiringCount}}</code>
-        <code>{{criticalCount}}</code>
-        <code>{{dashboardUrl}}</code>
-        <code>{{errorMessage}}</code>
-        <code>{{timestamp}}</code>
+@* ── Teams — JSON view ─────────────────────────────────────────────────────── *@
+@if (_isTeams && _viewMode == "json")
+{
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:.5rem;padding:1.25rem">
+        <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.04em">
+            Adaptive Card JSON · Teams Incoming Webhook payload
+        </div>
+        <pre style="background:#0f172a;padding:1rem;border-radius:.375rem;overflow:auto;
+                    font-size:.75rem;color:#e2e8f0;max-height:520px;margin:0">@GetCurrentJson()</pre>
+    </div>
+    <p style="font-size:.75rem;color:var(--text-muted);margin-top:.5rem">
+        Test at
+        <a href="https://adaptivecards.io/designer/" target="_blank" rel="noopener"
+           style="color:var(--accent)">adaptivecards.io/designer ↗</a>
+        — paste the <code>attachments[0].content</code> object.
+    </p>
+}
+
+@* ── Teams — Rendered Adaptive Card ───────────────────────────────────────── *@
+@if (_isTeams && _viewMode == "rendered")
+{
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:.5rem;padding:1.25rem">
+        <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.04em">
+            Adaptive Card · Rendered preview
+        </div>
+        <div id="ac-render-container" style="min-height:120px"></div>
+    </div>
+}
+
+@* ── Email — rendered HTML ─────────────────────────────────────────────────── *@
+@if (!_isTeams)
+{
+    <div style="border:1px solid var(--border);border-radius:.5rem;overflow:hidden">
+        <div style="background:var(--surface);padding:.5rem 1rem;font-size:.72rem;font-weight:600;
+                    color:var(--text-muted);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.04em">
+            Email · HTML preview
+        </div>
+        <iframe style="width:100%;height:560px;border:none;background:#fff"
+                srcdoc="@GetCurrentHtml()"></iframe>
+    </div>
+}
+
+@* ── Notification flow documentation ──────────────────────────────────────── *@
+<div id="notification-flow" style="margin-top:2.5rem">
+    <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">Notification flow</h2>
+
+    <div style="font-size:.82rem;background:var(--surface);border:1px solid var(--border);
+                border-radius:.5rem;padding:1.25rem">
+        <p style="margin-bottom:.75rem">
+            Each scan job triggers <strong>at most 2 notifications per channel</strong>
+            (one alert + one status). Notifications contain <strong>aggregated counts</strong>,
+            never one message per individual secret.
+        </p>
+
+        <table class="table" style="font-size:.8rem;margin-bottom:0">
+            <thead>
+                <tr>
+                    <th>Channel</th>
+                    <th>Max / scan</th>
+                    <th>Triggered when</th>
+                    <th>Contains</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>teamsWebhooks.alerts</code></td>
+                    <td>1</td>
+                    <td>Critical secrets found → Critical card<br/>else Expiring secrets found → Expiring card</td>
+                    <td>criticalCount, expiringCount, secretCount</td>
+                </tr>
+                <tr>
+                    <td><code>teamsWebhooks.status</code></td>
+                    <td>1</td>
+                    <td>After every successful scan</td>
+                    <td>secretCount, expiringCount, criticalCount</td>
+                </tr>
+                <tr>
+                    <td><code>teamsWebhooks.errors</code></td>
+                    <td>1</td>
+                    <td>Scan job fails</td>
+                    <td>errorMessage, timestamp</td>
+                </tr>
+                <tr>
+                    <td>Mail (<code>sendOnCritical</code>)</td>
+                    <td>1</td>
+                    <td>Critical secrets found → Critical mail<br/>else Expiring secrets → Expiring mail</td>
+                    <td>Same as Teams alerts</td>
+                </tr>
+                <tr>
+                    <td>Mail (<code>sendOnStatus</code>)</td>
+                    <td>1</td>
+                    <td>After every successful scan (opt-in, default off)</td>
+                    <td>Same as Teams status</td>
+                </tr>
+                <tr>
+                    <td>Mail (<code>sendOnError</code>)</td>
+                    <td>1</td>
+                    <td>Scan job fails</td>
+                    <td>errorMessage, timestamp</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="margin-top:1rem;padding:.75rem;background:rgba(59,130,246,.1);
+                    border-radius:.375rem;border:1px solid rgba(59,130,246,.2)">
+            <strong style="font-size:.8rem">Template placeholders (Handlebars)</strong>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+                        gap:.2rem .75rem;margin-top:.4rem">
+                @foreach (var ph in Placeholders)
+                {
+                    <code style="font-size:.75rem">{{@ph.Key}}</code>
+                }
+            </div>
+        </div>
     </div>
 </div>
 
 @code {
     private string _selectedTemplate = "teams-critical";
-    private string _demoTenant    = "Contoso Corporation";
-    private int    _demoTotal     = 42;
-    private int    _demoExpiring  = 8;
-    private int    _demoCritical  = 3;
+    private bool   _showTestData     = true;
+    private string _viewMode         = "rendered";
 
-    private Dictionary<string, string> DemoCtx => new()
+    private string _demoTenant   = "Contoso Corporation";
+    private int    _demoTotal    = 42;
+    private int    _demoExpiring = 8;
+    private int    _demoCritical = 3;
+
+    private bool _isTeams => _selectedTemplate.StartsWith("teams-");
+
+    private static readonly Dictionary<string, string> Placeholders = new()
+    {
+        ["tenantDisplayName"] = "Job's tenantDisplayName",
+        ["scanTimestamp"]     = "ISO 8601 scan completion time",
+        ["secretCount"]       = "Total secrets found",
+        ["expiringCount"]     = "Secrets within expiringWithinDays",
+        ["criticalCount"]     = "Secrets within criticalWithinDays",
+        ["dashboardUrl"]      = "AARM_DASHBOARD_URL app setting",
+        ["errorMessage"]      = "Exception message (error templates only)",
+        ["timestamp"]         = "ISO 8601 failure time (error templates only)",
+    };
+
+    // ── Data context ──────────────────────────────────────────────────────────
+
+    private Dictionary<string, string> LiveCtx => new()
     {
         ["tenantDisplayName"] = _demoTenant,
         ["scanTimestamp"]     = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm") + " UTC",
@@ -110,56 +236,120 @@ else
 
     private string ApplyCtx(string template)
     {
-        var result = template;
-        foreach (var (k, v) in DemoCtx)
-            result = result.Replace($"{{{{{k}}}}}", v);
-        return result;
+        if (!_showTestData) return template;
+        foreach (var (k, v) in LiveCtx)
+            template = template.Replace("{{" + k + "}}", v);
+        return template;
     }
 
-    private string GetTeamsJson()
+    private string GetCurrentJson()  => ApplyCtx(GetRaw(_selectedTemplate));
+    private string GetCurrentHtml()  => ApplyCtx(GetRaw(_selectedTemplate));
+
+    // ── Event handlers ────────────────────────────────────────────────────────
+
+    private async Task OnTemplateChanged()
     {
-        var raw = _selectedTemplate switch
-        {
-            "teams-critical" => GetBuiltIn("teams-critical"),
-            "teams-expiring" => GetBuiltIn("teams-expiring"),
-            "teams-summary"  => GetBuiltIn("teams-summary"),
-            "teams-error"    => GetBuiltIn("teams-error"),
-            _                => "{}"
-        };
-        return ApplyCtx(raw);
+        if (_isTeams && _viewMode == "rendered")
+            await RenderCardAsync();
     }
 
-    private string GetMailHtml() => ApplyCtx(GetBuiltIn(_selectedTemplate));
-
-    private static string GetBuiltIn(string key) => key switch
+    private async Task SetData(bool withData)
     {
-        "teams-critical" => BuiltInTeams.Critical,
-        "teams-expiring" => BuiltInTeams.Expiring,
-        "teams-summary"  => BuiltInTeams.Summary,
-        "teams-error"    => BuiltInTeams.Error,
-        "mail-critical"  => BuiltInMail.Critical,
-        "mail-expiring"  => BuiltInMail.Expiring,
-        "mail-summary"   => BuiltInMail.Summary,
-        "mail-error"     => BuiltInMail.Error,
+        _showTestData = withData;
+        if (_isTeams && _viewMode == "rendered")
+            await RenderCardAsync();
+    }
+
+    private async Task SetView(string mode)
+    {
+        _viewMode = mode;
+        if (mode == "rendered")
+            await RenderCardAsync();
+    }
+
+    private async Task OnDataChanged()
+    {
+        if (_isTeams && _viewMode == "rendered")
+            await RenderCardAsync();
+    }
+
+    private async Task RenderCardAsync()
+    {
+        await Task.Yield(); // let Blazor render the container div first
+        await JS.InvokeVoidAsync("aarm.renderAdaptiveCard", "ac-render-container", GetCurrentJson());
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _isTeams && _viewMode == "rendered")
+            await RenderCardAsync();
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    // ── Built-in templates ────────────────────────────────────────────────────
+
+    private static string GetRaw(string key) => key switch
+    {
+        "teams-critical" => TeamsTemplates.Critical,
+        "teams-expiring" => TeamsTemplates.Expiring,
+        "teams-summary"  => TeamsTemplates.Summary,
+        "teams-error"    => TeamsTemplates.Error,
+        "mail-critical"  => MailTemplates.Critical,
+        "mail-expiring"  => MailTemplates.Expiring,
+        "mail-summary"   => MailTemplates.Summary,
+        "mail-error"     => MailTemplates.Error,
         _                => "",
     };
 
-    // Inline copies of built-in templates (kept in sync with defaultTemplates.ts
-    // and defaultMailTemplates.ts in the Azure Function).
-    private static class BuiltInTeams
+    private static class TeamsTemplates
     {
-        public const string Critical = """{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","content":{"$schema":"http://adaptivecards.io/schemas/adaptive-card.json","type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","text":"🚨 CRITICAL: Expiring Secrets","weight":"bolder","size":"large","color":"attention"},{"type":"TextBlock","text":"{{tenantDisplayName}}","spacing":"none","isSubtle":true},{"type":"FactSet","spacing":"medium","facts":[{"title":"Critical","value":"{{criticalCount}}"},{"title":"Expiring","value":"{{expiringCount}}"},{"title":"Total","value":"{{secretCount}}"},{"title":"Scanned at (UTC)","value":"{{scanTimestamp}}"}]},{"type":"TextBlock","text":"Immediate action required.","wrap":true,"spacing":"medium","color":"attention"}],"actions":[{"type":"Action.OpenUrl","title":"Open Dashboard","url":"{{dashboardUrl}}"}]}}]}""";
+        public const string Critical = """{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","content":{"$schema":"http://adaptivecards.io/schemas/adaptive-card.json","type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","text":"🚨 CRITICAL: Expiring Secrets","weight":"bolder","size":"large","color":"attention"},{"type":"TextBlock","text":"{{tenantDisplayName}}","spacing":"none","isSubtle":true},{"type":"FactSet","spacing":"medium","facts":[{"title":"Critical","value":"{{criticalCount}}"},{"title":"Expiring","value":"{{expiringCount}}"},{"title":"Total","value":"{{secretCount}}"},{"title":"Scanned at (UTC)","value":"{{scanTimestamp}}"}]},{"type":"TextBlock","text":"Immediate action required. Rotate critical secrets before they expire.","wrap":true,"spacing":"medium","color":"attention"}],"actions":[{"type":"Action.OpenUrl","title":"Open Dashboard","url":"{{dashboardUrl}}"}]}}]}""";
         public const string Expiring = """{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","content":{"$schema":"http://adaptivecards.io/schemas/adaptive-card.json","type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","text":"⚠️ Secrets Expiring Soon","weight":"bolder","size":"large","color":"warning"},{"type":"TextBlock","text":"{{tenantDisplayName}}","spacing":"none","isSubtle":true},{"type":"FactSet","spacing":"medium","facts":[{"title":"Expiring within threshold","value":"{{expiringCount}}"},{"title":"Total secrets","value":"{{secretCount}}"},{"title":"Scanned at (UTC)","value":"{{scanTimestamp}}"}]}],"actions":[{"type":"Action.OpenUrl","title":"Open Dashboard","url":"{{dashboardUrl}}"}]}}]}""";
         public const string Summary  = """{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","content":{"$schema":"http://adaptivecards.io/schemas/adaptive-card.json","type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","text":"✅ Scan Completed","weight":"bolder","size":"medium","color":"good"},{"type":"TextBlock","text":"{{tenantDisplayName}}","spacing":"none","isSubtle":true},{"type":"FactSet","spacing":"medium","facts":[{"title":"Total secrets","value":"{{secretCount}}"},{"title":"Expiring","value":"{{expiringCount}}"},{"title":"Critical","value":"{{criticalCount}}"},{"title":"Scanned at (UTC)","value":"{{scanTimestamp}}"}]}],"actions":[{"type":"Action.OpenUrl","title":"Open Dashboard","url":"{{dashboardUrl}}"}]}}]}""";
         public const string Error    = """{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","content":{"$schema":"http://adaptivecards.io/schemas/adaptive-card.json","type":"AdaptiveCard","version":"1.4","body":[{"type":"TextBlock","text":"❌ Scan Failed","weight":"bolder","size":"large","color":"attention"},{"type":"TextBlock","text":"{{tenantDisplayName}}","spacing":"none","isSubtle":true},{"type":"TextBlock","text":"{{errorMessage}}","wrap":true,"spacing":"medium"},{"type":"TextBlock","text":"Failed at (UTC): {{timestamp}}","isSubtle":true,"spacing":"none"}],"actions":[{"type":"Action.OpenUrl","title":"Open Dashboard","url":"{{dashboardUrl}}"}]}}]}""";
     }
 
-    private static class BuiltInMail
+    private static class MailTemplates
     {
-        private const string Head = """<head><meta charset="utf-8"><style>body{font-family:system-ui,sans-serif;background:#f8fafc;margin:0;padding:0}.wrap{max-width:600px;margin:2rem auto;background:#fff;border-radius:.5rem;border:1px solid #e2e8f0;overflow:hidden}.header{padding:1.5rem 2rem;background:#1e293b;color:#fff}.header h1{margin:0;font-size:1.25rem}.header p{margin:.25rem 0 0;font-size:.85rem;color:#94a3b8}.body{padding:1.5rem 2rem}table{width:100%;border-collapse:collapse;font-size:.9rem}td{padding:.4rem .75rem;border-bottom:1px solid #f1f5f9}td:first-child{color:#64748b;width:200px}.badge{display:inline-block;padding:.2rem .6rem;border-radius:.25rem;font-size:.8rem;font-weight:600}.badge-critical{background:#fef2f2;color:#dc2626}.badge-warning{background:#fffbeb;color:#d97706}.btn{display:inline-block;margin-top:1.5rem;padding:.6rem 1.4rem;background:#3b82f6;color:#fff;text-decoration:none;border-radius:.375rem;font-size:.9rem;font-weight:600}.footer{padding:.75rem 2rem;background:#f8fafc;font-size:.75rem;color:#94a3b8;border-top:1px solid #e2e8f0}</style></head>""";
-        public static string Critical => $"""<!DOCTYPE html><html lang="en">{Head}<body><div class="wrap"><div class="header"><h1>🚨 CRITICAL — Secrets Expiring</h1><p>{{{{tenantDisplayName}}}}</p></div><div class="body"><p>Immediate action required.</p><table><tr><td>Critical</td><td><span class="badge badge-critical">{{{{criticalCount}}}}</span></td></tr><tr><td>Expiring</td><td><span class="badge badge-warning">{{{{expiringCount}}}}</span></td></tr><tr><td>Total</td><td>{{{{secretCount}}}}</td></tr><tr><td>Scanned at (UTC)</td><td>{{{{scanTimestamp}}}}</td></tr></table><a href="{{{{dashboardUrl}}}}" class="btn">Open Dashboard</a></div><div class="footer">Azure App Registration Monitor</div></div></body></html>""";
-        public static string Expiring => $"""<!DOCTYPE html><html lang="en">{Head}<body><div class="wrap"><div class="header"><h1>⚠️ Secrets Expiring Soon</h1><p>{{{{tenantDisplayName}}}}</p></div><div class="body"><p>Plan rotation soon.</p><table><tr><td>Expiring within threshold</td><td><span class="badge badge-warning">{{{{expiringCount}}}}</span></td></tr><tr><td>Total</td><td>{{{{secretCount}}}}</td></tr><tr><td>Scanned at (UTC)</td><td>{{{{scanTimestamp}}}}</td></tr></table><a href="{{{{dashboardUrl}}}}" class="btn">Open Dashboard</a></div><div class="footer">Azure App Registration Monitor</div></div></body></html>""";
-        public static string Summary  => $"""<!DOCTYPE html><html lang="en">{Head}<body><div class="wrap"><div class="header"><h1>✅ Scan Completed</h1><p>{{{{tenantDisplayName}}}}</p></div><div class="body"><table><tr><td>Total secrets</td><td>{{{{secretCount}}}}</td></tr><tr><td>Expiring</td><td>{{{{expiringCount}}}}</td></tr><tr><td>Critical</td><td>{{{{criticalCount}}}}</td></tr><tr><td>Scanned at (UTC)</td><td>{{{{scanTimestamp}}}}</td></tr></table><a href="{{{{dashboardUrl}}}}" class="btn">Open Dashboard</a></div><div class="footer">Azure App Registration Monitor</div></div></body></html>""";
-        public static string Error    => $"""<!DOCTYPE html><html lang="en">{Head}<body><div class="wrap"><div class="header" style="background:#7f1d1d"><h1>❌ Scan Failed</h1><p>{{{{tenantDisplayName}}}}</p></div><div class="body"><p><strong>Error:</strong></p><pre style="background:#fef2f2;border:1px solid #fecaca;padding:.75rem;border-radius:.375rem;font-size:.85rem;white-space:pre-wrap">{{{{errorMessage}}}}</pre><table><tr><td>Failed at (UTC)</td><td>{{{{timestamp}}}}</td></tr></table><a href="{{{{dashboardUrl}}}}" class="btn" style="background:#dc2626">Open Dashboard</a></div><div class="footer">Azure App Registration Monitor</div></div></body></html>""";
+        private const string H = @"<head><meta charset=""utf-8""><style>body{font-family:system-ui,sans-serif;background:#f8fafc;margin:0;padding:0}.wrap{max-width:600px;margin:2rem auto;background:#fff;border-radius:.5rem;border:1px solid #e2e8f0;overflow:hidden}.header{padding:1.5rem 2rem;background:#1e293b;color:#fff}.header h1{margin:0;font-size:1.25rem}.body{padding:1.5rem 2rem}table{width:100%;border-collapse:collapse;font-size:.9rem}td{padding:.4rem .75rem;border-bottom:1px solid #f1f5f9}td:first-child{color:#64748b;width:200px}.badge{display:inline-block;padding:.2rem .6rem;border-radius:.25rem;font-size:.8rem;font-weight:600}.badge-critical{background:#fef2f2;color:#dc2626}.badge-warning{background:#fffbeb;color:#d97706}.btn{display:inline-block;margin-top:1.5rem;padding:.6rem 1.4rem;background:#3b82f6;color:#fff;text-decoration:none;border-radius:.375rem;font-size:.9rem;font-weight:600}.footer{padding:.75rem 2rem;background:#f8fafc;font-size:.75rem;color:#94a3b8;border-top:1px solid #e2e8f0}</style></head>";
+        private const string F = @"<div class=""footer"">Azure App Registration Monitor</div></div></body></html>";
+
+        public static readonly string Critical =
+            @"<!DOCTYPE html><html lang=""en"">" + H +
+            @"<body><div class=""wrap""><div class=""header""><h1>🚨 CRITICAL — Secrets Expiring</h1><p style=""margin:.25rem 0 0;font-size:.85rem;color:#94a3b8"">{{tenantDisplayName}}</p></div>" +
+            @"<div class=""body""><p>Immediate action required. Rotate critical secrets before they expire.</p><table>" +
+            @"<tr><td>Critical (expire very soon)</td><td><span class=""badge badge-critical"">{{criticalCount}}</span></td></tr>" +
+            @"<tr><td>Expiring (within threshold)</td><td><span class=""badge badge-warning"">{{expiringCount}}</span></td></tr>" +
+            @"<tr><td>Total secrets monitored</td><td>{{secretCount}}</td></tr>" +
+            @"<tr><td>Scanned at (UTC)</td><td>{{scanTimestamp}}</td></tr></table>" +
+            @"<a href=""{{dashboardUrl}}"" class=""btn"">Open Dashboard</a></div>" + F;
+
+        public static readonly string Expiring =
+            @"<!DOCTYPE html><html lang=""en"">" + H +
+            @"<body><div class=""wrap""><div class=""header""><h1>⚠️ Secrets Expiring Soon</h1><p style=""margin:.25rem 0 0;font-size:.85rem;color:#94a3b8"">{{tenantDisplayName}}</p></div>" +
+            @"<div class=""body""><p>Some secrets are approaching their expiry date. Plan rotation soon.</p><table>" +
+            @"<tr><td>Expiring within threshold</td><td><span class=""badge badge-warning"">{{expiringCount}}</span></td></tr>" +
+            @"<tr><td>Total secrets monitored</td><td>{{secretCount}}</td></tr>" +
+            @"<tr><td>Scanned at (UTC)</td><td>{{scanTimestamp}}</td></tr></table>" +
+            @"<a href=""{{dashboardUrl}}"" class=""btn"">Open Dashboard</a></div>" + F;
+
+        public static readonly string Summary =
+            @"<!DOCTYPE html><html lang=""en"">" + H +
+            @"<body><div class=""wrap""><div class=""header"" style=""background:#166534""><h1>✅ Scan Completed</h1><p style=""margin:.25rem 0 0;font-size:.85rem;color:#94a3b8"">{{tenantDisplayName}}</p></div>" +
+            @"<div class=""body""><table>" +
+            @"<tr><td>Total secrets monitored</td><td>{{secretCount}}</td></tr>" +
+            @"<tr><td>Expiring</td><td>{{expiringCount}}</td></tr>" +
+            @"<tr><td>Critical</td><td>{{criticalCount}}</td></tr>" +
+            @"<tr><td>Scanned at (UTC)</td><td>{{scanTimestamp}}</td></tr></table>" +
+            @"<a href=""{{dashboardUrl}}"" class=""btn"">Open Dashboard</a></div>" + F;
+
+        public static readonly string Error =
+            @"<!DOCTYPE html><html lang=""en"">" + H +
+            @"<body><div class=""wrap""><div class=""header"" style=""background:#7f1d1d""><h1>❌ Scan Failed</h1><p style=""margin:.25rem 0 0;font-size:.85rem;color:#94a3b8"">{{tenantDisplayName}}</p></div>" +
+            @"<div class=""body""><p><strong>Error:</strong></p>" +
+            @"<pre style=""background:#fef2f2;border:1px solid #fecaca;padding:.75rem;border-radius:.375rem;font-size:.85rem;white-space:pre-wrap"">{{errorMessage}}</pre>" +
+            @"<table><tr><td>Failed at (UTC)</td><td>{{timestamp}}</td></tr></table>" +
+            @"<a href=""{{dashboardUrl}}"" class=""btn"" style=""background:#dc2626"">Open Dashboard</a></div>" + F;
     }
 }

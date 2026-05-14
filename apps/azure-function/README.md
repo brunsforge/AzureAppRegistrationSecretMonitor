@@ -633,7 +633,75 @@ Bei jedem Tick prüft der Trigger für alle konfigurierten Jobs ob ein Scan fäl
 2. App-Registrierungen und Secrets lesen
 3. Ergebnisse in `aarm-data/` in Blob Storage speichern
 4. Runtime-State aktualisieren (`lastRunAt`, `lastRunStatus`)
-5. Teams-Benachrichtigungen senden (gemäß Webhook-Konfiguration und Schwellenwerten)
+5. Benachrichtigungen senden (Teams + E-Mail, aggregiert)
+
+---
+
+## 7b. Benachrichtigungs-Flow
+
+### Aggregation
+
+Alle Benachrichtigungen enthalten **aggregierte Zahlen** (`criticalCount`, `expiringCount`, `secretCount`) — nie eine Nachricht pro einzelnem Secret.
+
+Pro Scan-Job werden **maximal 2 Nachrichten pro Kanal** gesendet:
+
+| Kanal | Max./Scan | Auslöser | Enthält |
+|---|---|---|---|
+| `teamsWebhooks.alerts` | 1 | Kritische Secrets → Critical-Card; sonst ablaufende Secrets → Expiring-Card | criticalCount, expiringCount, secretCount |
+| `teamsWebhooks.status` | 1 | Nach jedem erfolgreichen Scan | secretCount, expiringCount, criticalCount |
+| `teamsWebhooks.errors` | 1 | Scan-Fehler | errorMessage, timestamp |
+| Mail `sendOnCritical` | 1 | Wie alerts — Critical ODER Expiring, nie beide | Wie alerts |
+| Mail `sendOnStatus` | 1 | Nach jedem Scan (Standard: deaktiviert) | Wie status |
+| Mail `sendOnError` | 1 | Scan-Fehler | errorMessage, timestamp |
+
+> **Hinweis:** Bei aktiviertem `sendOnCritical` und `sendOnStatus` können maximal 2 Mails pro Scan gesendet werden (eine Alert-Mail + eine Status-Mail). Das entspricht dem Teams-Verhalten mit separaten `alerts`- und `status`-Webhooks.
+
+### Handlebars-Platzhalter
+
+Verfügbar in allen Adaptive Card- und HTML-E-Mail-Templates:
+
+| Platzhalter | Wert |
+|---|---|
+| `{{tenantDisplayName}}` | `tenantDisplayName` aus dem Job |
+| `{{scanTimestamp}}` | ISO 8601 Abschlusszeit des Scans |
+| `{{secretCount}}` | Anzahl aller Secrets |
+| `{{expiringCount}}` | Secrets innerhalb `expiringWithinDays` |
+| `{{criticalCount}}` | Secrets innerhalb `criticalWithinDays` |
+| `{{dashboardUrl}}` | Wert des `AARM_DASHBOARD_URL` App Settings |
+| `{{errorMessage}}` | Exception-Nachricht (nur Error-Templates) |
+| `{{timestamp}}` | ISO 8601 Fehlerzeitpunkt (nur Error-Templates) |
+
+### Adaptive Card Templates (Teams)
+
+Custom-Templates sind Adaptive Card v1.4 JSON-Dateien, gespeichert als Blobs in `aarm-config/templates/`. Der Blob-Name wird in `notificationTemplates.critical/expiring/summary/error` referenziert.
+
+Die Teams-Message-Struktur muss das `message`-Format mit `application/vnd.microsoft.card.adaptive` Anhang verwenden:
+
+```json
+{
+  "type": "message",
+  "attachments": [{
+    "contentType": "application/vnd.microsoft.card.adaptive",
+    "content": {
+      "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+      "type": "AdaptiveCard",
+      "version": "1.4",
+      "body": [ ... ],
+      "actions": [ ... ]
+    }
+  }]
+}
+```
+
+Testen im MAUI: **Templates-Seite** → Template auswählen → Toggle "With test data" → Toggle "Rendered card".
+
+### HTML E-Mail Templates (ACS)
+
+Custom-Templates sind HTML-Dateien mit Handlebars-Platzhaltern, gespeichert in `aarm-config/templates/`. Referenziert über `notificationTemplates.emailCritical/emailExpiring/emailSummary/emailError`.
+
+ACS-Voraussetzungen:
+- `AARM_ACS_CONNECTION_STRING` App Setting (KV-Referenz auf `aarm-acs-connection`)
+- `AARM_ACS_SENDER_EMAIL` App Setting (gesetzt durch Bicep-Deployment)
 
 ---
 

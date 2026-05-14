@@ -14,22 +14,17 @@ interface Poller {
   pollUntilDone(): Promise<{ status: string }>;
 }
 
-let EmailClientClass: new (endpoint: string, credential: unknown) => EmailClient;
-let DefaultAzureCredentialClass: new () => unknown;
+let EmailClientClass: new (connectionString: string) => EmailClient;
 
 function lazyLoad(): void {
   if (!EmailClientClass) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     EmailClientClass = require('@azure/communication-email').EmailClient;
   }
-  if (!DefaultAzureCredentialClass) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    DefaultAzureCredentialClass = require('@azure/identity').DefaultAzureCredential;
-  }
 }
 
 export function isAcsConfigured(): boolean {
-  return !!(process.env['AARM_ACS_ENDPOINT'] && process.env['AARM_ACS_SENDER_EMAIL']);
+  return !!(process.env['AARM_ACS_CONNECTION_STRING'] && process.env['AARM_ACS_SENDER_EMAIL']);
 }
 
 export async function sendMail(
@@ -37,12 +32,12 @@ export async function sendMail(
   subject: string,
   html: string,
 ): Promise<void> {
-  const endpoint = process.env['AARM_ACS_ENDPOINT'];
-  const sender   = process.env['AARM_ACS_SENDER_EMAIL'];
-  if (!endpoint || !sender) throw new Error('AARM_ACS_ENDPOINT or AARM_ACS_SENDER_EMAIL not configured');
+  const connStr = process.env['AARM_ACS_CONNECTION_STRING'];
+  const sender  = process.env['AARM_ACS_SENDER_EMAIL'];
+  if (!connStr || !sender) throw new Error('ACS not configured (AARM_ACS_CONNECTION_STRING or AARM_ACS_SENDER_EMAIL missing)');
 
   lazyLoad();
-  const client = new EmailClientClass(endpoint, new DefaultAzureCredentialClass());
+  const client = new EmailClientClass(connStr);
 
   const poller = await client.beginSend({
     senderAddress: sender,
