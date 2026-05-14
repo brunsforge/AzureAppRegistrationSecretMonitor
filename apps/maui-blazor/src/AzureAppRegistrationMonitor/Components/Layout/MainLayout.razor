@@ -2,6 +2,7 @@
 @inject AppInitializationService InitSvc
 @inject SettingsService SettingsSvc
 @inject NavigationManager Nav
+@inject AppStateService AppState
 
 <div class="aarm-layout">
     <nav class="aarm-sidebar">
@@ -51,13 +52,26 @@
             </li>
             @if (SettingsSvc.Settings.AppMode == "cloud" && !string.IsNullOrWhiteSpace(SettingsSvc.Settings.CloudBaseUri))
             {
-                <li style="border-top:1px solid var(--border);margin-top:auto;padding-top:.5rem">
-                    <a href="@(SettingsSvc.Settings.CloudBaseUri.TrimEnd('/'))/api/dashboard"
+                var baseUrl = SettingsSvc.Settings.CloudBaseUri.TrimEnd('/');
+                var activeTenantId = AppState.ActiveTenant?.TenantId ?? "";
+                <li style="border-top:1px solid var(--border);margin-top:auto;padding-top:.25rem">
+                    <a href="@baseUrl/api/dashboard"
                        target="_blank" rel="noopener"
-                       style="display:flex;align-items:center;gap:.5rem;padding:.6rem 1.25rem;
-                              color:var(--text-muted);font-size:.82rem;text-decoration:none">
-                        <span>☁</span> Cloud Dashboard ↗
+                       title="Interactive dashboard — live data via fetch()"
+                       style="display:flex;align-items:center;gap:.5rem;padding:.5rem 1.25rem;
+                              color:var(--text-muted);font-size:.8rem;text-decoration:none">
+                        <span>📊</span> Cloud Dashboard ↗
                     </a>
+                    @if (!string.IsNullOrEmpty(activeTenantId))
+                    {
+                        <a href="@baseUrl/api/report?tenant=@activeTenantId"
+                           target="_blank" rel="noopener"
+                           title="Static snapshot report — no JS, printable"
+                           style="display:flex;align-items:center;gap:.5rem;padding:.5rem 1.25rem;
+                                  color:var(--text-muted);font-size:.8rem;text-decoration:none">
+                            <span>📄</span> Snapshot Report ↗
+                        </a>
+                    }
                 </li>
             }
         </ul>
