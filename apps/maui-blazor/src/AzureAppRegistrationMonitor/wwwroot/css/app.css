@@ -170,6 +170,15 @@ html, body {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
+    /* Override Bootstrap table CSS variables so our dark theme wins */
+    --bs-table-bg:          transparent;
+    --bs-table-striped-bg:  transparent;
+    --bs-table-hover-bg:    transparent;
+    --bs-table-active-bg:   transparent;
+    --bs-table-color:       var(--text);
+    --bs-table-striped-color: var(--text);
+    --bs-table-hover-color: var(--text);
+    --bs-table-border-color: var(--border);
 }
 
 .aarm-table th {
