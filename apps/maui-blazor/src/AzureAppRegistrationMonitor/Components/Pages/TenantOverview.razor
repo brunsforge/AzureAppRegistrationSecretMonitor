@@ -108,31 +108,104 @@
             </div>
         </div>
         <div class="settings-row">
+            <label>Expiry thresholds</label>
+            <div class="d-flex gap-3 align-items-center flex-wrap" style="font-size:.82rem">
+                <span>Expiring within</span>
+                <input type="number" class="form-control" style="width:65px" min="1" max="365"
+                       @bind="_cfExpiringDays" />
+                <span>days &nbsp;·&nbsp; Critical within</span>
+                <input type="number" class="form-control" style="width:65px" min="1" max="365"
+                       @bind="_cfCriticalDays" />
+                <span>days</span>
+            </div>
+        </div>
+
+        <hr style="border-color:var(--border);margin:1rem 0" />
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.75rem">Teams Webhooks</h3>
+
+        <div class="settings-row">
+            <label>Status (after every scan)</label>
+            <input class="form-control" style="max-width:480px" placeholder="https://…"
+                   @bind="_cfTeamsStatus" />
+        </div>
+        <div class="settings-row">
+            <label>Alerts (expiring / critical)</label>
+            <input class="form-control" style="max-width:480px" placeholder="https://…"
+                   @bind="_cfTeamsAlerts" />
+        </div>
+        <div class="settings-row">
+            <label>Errors (scan failure)</label>
+            <input class="form-control" style="max-width:480px" placeholder="https://…"
+                   @bind="_cfTeamsErrors" />
+        </div>
+
+        <hr style="border-color:var(--border);margin:1rem 0" />
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.25rem">Adaptive Card Templates</h3>
+        <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:.75rem">
+            Blob names in <code>aarm-config/templates/</code>. Leave empty to use built-in templates.
+            <a href="/template-preview" style="color:var(--accent);margin-left:.4rem">Preview templates ↗</a>
+        </p>
+        <div class="settings-row">
+            <label>Critical template</label>
+            <input class="form-control" style="max-width:300px" placeholder="critical-custom.json"
+                   @bind="_cfTplCritical" />
+        </div>
+        <div class="settings-row">
+            <label>Expiring template</label>
+            <input class="form-control" style="max-width:300px" placeholder="expiring-custom.json"
+                   @bind="_cfTplExpiring" />
+        </div>
+        <div class="settings-row">
+            <label>Summary template</label>
+            <input class="form-control" style="max-width:300px" placeholder="summary-custom.json"
+                   @bind="_cfTplSummary" />
+        </div>
+        <div class="settings-row">
+            <label>Error template</label>
+            <input class="form-control" style="max-width:300px" placeholder="error-custom.json"
+                   @bind="_cfTplError" />
+        </div>
+
+        <hr style="border-color:var(--border);margin:1rem 0" />
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.25rem">E-Mail Notifications (ACS)</h3>
+        <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:.75rem">
+            Requires Azure Communication Services configured in the Function App.
+        </p>
+        <div class="settings-row">
+            <label>Recipients</label>
+            <input class="form-control" style="max-width:480px"
+                   placeholder="ops@contoso.com, sec@contoso.com"
+                   @bind="_cfMailTo" />
+            <small>Comma-separated. Leave empty to disable mail notifications.</small>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_cfMailTo))
+        {
+            <div class="settings-row">
+                <label>Send on</label>
+                <div class="d-flex gap-3 flex-wrap" style="font-size:.82rem">
+                    <label class="d-flex gap-1 align-items-center">
+                        <input type="checkbox" @bind="_cfMailSendExpiring" /> Expiring
+                    </label>
+                    <label class="d-flex gap-1 align-items-center">
+                        <input type="checkbox" @bind="_cfMailSendCritical" /> Critical
+                    </label>
+                    <label class="d-flex gap-1 align-items-center">
+                        <input type="checkbox" @bind="_cfMailSendStatus" /> Status (every scan)
+                    </label>
+                    <label class="d-flex gap-1 align-items-center">
+                        <input type="checkbox" @bind="_cfMailSendError" /> Errors
+                    </label>
+                </div>
+            </div>
+        }
+
+        <hr style="border-color:var(--border);margin:1rem 0" />
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:.75rem">Log Analytics</h3>
+        <div class="settings-row">
             <label>Log Analytics Workspace ID</label>
             <input class="form-control" style="max-width:380px"
                    @bind="_cf.LogAnalytics!.WorkspaceId"
                    placeholder="Optional — required for usage analysis" />
-        </div>
-        <div class="settings-row">
-            <label>Teams — Status webhook</label>
-            <input class="form-control" style="max-width:480px"
-                   placeholder="https://…"
-                   @bind="_cfTeamsStatus" />
-            <small>Sent after every scan.</small>
-        </div>
-        <div class="settings-row">
-            <label>Teams — Alerts webhook</label>
-            <input class="form-control" style="max-width:480px"
-                   placeholder="https://…"
-                   @bind="_cfTeamsAlerts" />
-            <small>Sent when expiring or critical secrets are found.</small>
-        </div>
-        <div class="settings-row">
-            <label>Teams — Errors webhook</label>
-            <input class="form-control" style="max-width:480px"
-                   placeholder="https://…"
-                   @bind="_cfTeamsErrors" />
-            <small>Sent when a scan fails.</small>
         </div>
         <div class="d-flex gap-2 mt-2">
             <button class="btn btn-primary btn-sm" @onclick="SaveCloudTenantAsync" disabled="@_cloudSaving">
@@ -427,6 +500,17 @@ else
     private string _cfTeamsStatus  = "";
     private string _cfTeamsAlerts  = "";
     private string _cfTeamsErrors  = "";
+    private string _cfTplCritical  = "";
+    private string _cfTplExpiring  = "";
+    private string _cfTplSummary   = "";
+    private string _cfTplError     = "";
+    private string _cfMailTo       = "";
+    private bool   _cfMailSendExpiring = true;
+    private bool   _cfMailSendCritical = true;
+    private bool   _cfMailSendStatus   = false;
+    private bool   _cfMailSendError    = true;
+    private int    _cfExpiringDays = 30;
+    private int    _cfCriticalDays = 7;
     private string? _cloudFormError;
     private bool    _cloudSaving;
 
@@ -521,7 +605,6 @@ else
                 AuthMode:                    _fAuthMode,
                 ClientId:                    _fAuthMode != "azure-cli" ? _fClientId.Trim() : null,
                 Username:                    _fAuthMode == "username-password" ? _fUsername.Trim() : null,
-                DefaultEnvironmentName:      existing?.DefaultEnvironmentName ?? "default",
                 LogAnalyticsWorkspaceId:     string.IsNullOrWhiteSpace(_fWorkspaceId) ? null : _fWorkspaceId.Trim(),
                 CreatedAt:                   existing?.CreatedAt ?? now,
                 UpdatedAt:                   now,
@@ -598,6 +681,11 @@ else
     {
         _cf = new CloudTenantRequest { LogAnalytics = new() };
         _cfTeamsStatus = _cfTeamsAlerts = _cfTeamsErrors = "";
+        _cfTplCritical = _cfTplExpiring = _cfTplSummary = _cfTplError = "";
+        _cfMailTo = "";
+        _cfMailSendExpiring = true; _cfMailSendCritical = true;
+        _cfMailSendStatus = false;  _cfMailSendError = true;
+        _cfExpiringDays = 30; _cfCriticalDays = 7;
         _cloudEditTenantId = null;
         _cloudFormError    = null;
         _showCloudForm     = true;
@@ -611,10 +699,14 @@ else
             TenantDisplayName = t.DisplayName,
             AuthMode          = t.AuthMode,
             ClientId          = t.ClientId,
-            EnvironmentName   = t.DefaultEnvironmentName ?? "default",
             LogAnalytics      = new() { WorkspaceId = t.LogAnalyticsWorkspaceId },
         };
         _cfTeamsStatus = _cfTeamsAlerts = _cfTeamsErrors = "";
+        _cfTplCritical = _cfTplExpiring = _cfTplSummary = _cfTplError = "";
+        _cfMailTo = "";
+        _cfMailSendExpiring = true; _cfMailSendCritical = true;
+        _cfMailSendStatus = false;  _cfMailSendError = true;
+        _cfExpiringDays = 30; _cfCriticalDays = 7;
         _cloudEditTenantId = t.TenantId;
         _cloudFormError    = null;
         _showCloudForm     = true;
@@ -644,6 +736,29 @@ else
             Alerts  = string.IsNullOrWhiteSpace(_cfTeamsAlerts)  ? null : _cfTeamsAlerts,
             Errors  = string.IsNullOrWhiteSpace(_cfTeamsErrors)  ? null : _cfTeamsErrors,
         };
+        _cf.NotificationTemplates = new()
+        {
+            Critical     = string.IsNullOrWhiteSpace(_cfTplCritical) ? null : _cfTplCritical,
+            Expiring     = string.IsNullOrWhiteSpace(_cfTplExpiring) ? null : _cfTplExpiring,
+            Summary      = string.IsNullOrWhiteSpace(_cfTplSummary)  ? null : _cfTplSummary,
+            Error        = string.IsNullOrWhiteSpace(_cfTplError)    ? null : _cfTplError,
+        };
+        _cf.NotificationThresholds = new()
+        {
+            ExpiringWithinDays = _cfExpiringDays,
+            CriticalWithinDays = _cfCriticalDays,
+        };
+        var mailAddresses = _cfMailTo
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        _cf.MailTargets = mailAddresses.Count > 0 ? new()
+        {
+            To              = mailAddresses,
+            SendOnExpiring  = _cfMailSendExpiring,
+            SendOnCritical  = _cfMailSendCritical,
+            SendOnStatus    = _cfMailSendStatus,
+            SendOnError     = _cfMailSendError,
+        } : null;
 
         _cloudSaving = true;
         try

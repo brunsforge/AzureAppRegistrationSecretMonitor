@@ -197,7 +197,7 @@ else
             var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
             var envelope = await DataProvider.GetAppsAsync(
                 tenant?.TenantId ?? _selectedTenant,
-                tenant?.DefaultEnvironmentName);
+                null);
             _apps = envelope?.Data?.ToList() ?? new();
             ComputeStats();
 

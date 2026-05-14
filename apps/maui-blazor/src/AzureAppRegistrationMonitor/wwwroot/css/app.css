@@ -61,6 +61,24 @@ html, body {
 
 .aarm-brand-icon { font-size: 1.2rem; }
 
+.aarm-mode-banner {
+    padding: .35rem 1.25rem;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+.aarm-mode-cloud {
+    background: rgba(59,130,246,.18);
+    color: #93c5fd;
+    border-bottom: 1px solid rgba(59,130,246,.3);
+}
+.aarm-mode-local {
+    background: rgba(34,197,94,.12);
+    color: #86efac;
+    border-bottom: 1px solid rgba(34,197,94,.2);
+}
+
 .aarm-nav {
     list-style: none;
     padding: 0.5rem 0;

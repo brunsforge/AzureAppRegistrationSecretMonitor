@@ -175,7 +175,7 @@ else
             var tenant = _tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant);
             var envelope = await DataProvider.GetPreflightAsync(
                 tenant?.TenantId ?? _selectedTenant,
-                tenant?.DefaultEnvironmentName);
+                null);
             _result = envelope?.Data;
         }
         catch (Exception ex) { _error = ex.Message; }

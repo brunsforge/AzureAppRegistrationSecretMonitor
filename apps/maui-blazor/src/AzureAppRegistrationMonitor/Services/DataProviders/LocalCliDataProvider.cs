@@ -51,7 +51,7 @@ public class LocalCliDataProvider : IDataProvider
         var profile = new TenantProfile(
             TenantId: req.TenantId, DisplayName: req.TenantDisplayName,
             AuthMode: req.AuthMode, ClientId: req.ClientId, Username: null,
-            DefaultEnvironmentName: req.EnvironmentName,
+
             LogAnalyticsWorkspaceId: req.LogAnalytics?.WorkspaceId,
             CreatedAt: now, UpdatedAt: now,
             LastPreflightAt: null, LastSuccessfulScanAt: null);
@@ -68,7 +68,7 @@ public class LocalCliDataProvider : IDataProvider
         var profile = new TenantProfile(
             TenantId: tenantId, DisplayName: req.TenantDisplayName,
             AuthMode: req.AuthMode, ClientId: req.ClientId, Username: null,
-            DefaultEnvironmentName: req.EnvironmentName,
+
             LogAnalyticsWorkspaceId: req.LogAnalytics?.WorkspaceId,
             CreatedAt: existing?.CreatedAt ?? now, UpdatedAt: now,
             LastPreflightAt: existing?.LastPreflightAt,

@@ -1,12 +1,13 @@
 @page "/settings"
+@using AzureAppRegistrationMonitor.Services
 @using AzureAppRegistrationMonitor.Services.DataProviders
 @using System.Text.Json
 @inject TenantConfigRepository TenantRepo
 @inject SettingsService SettingsSvc
 @inject TeamsNotificationService Teams
-@inject DelegatingDataProvider DataProviderProxy
+@inject AppInitializationService InitSvc
+@inject IDataProvider DataProvider
 @inject CredentialRepository CredRepo
-@inject LocalCliDataProvider LocalProvider
 @inject NavigationManager Nav
 
 <PageTitle>Settings — AARM</PageTitle>
@@ -340,7 +341,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _tenants = (await TenantRepo.ListTenantsAsync()).ToList();
+        _tenants = SettingsSvc.Settings.AppMode == "cloud"
+            ? (await DataProvider.GetTenantsAsync()).ToList()
+            : (await TenantRepo.ListTenantsAsync()).ToList();
         _configDir = Path.Combine(
             Environment.GetEnvironmentVariable("AARM_CONFIG_DIR") ??
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -371,11 +374,11 @@
             var uri = SettingsSvc.Settings.CloudBaseUri;
             var key = CredRepo.GetCloudFunctionKey() ?? "";
             if (!string.IsNullOrEmpty(uri) && !string.IsNullOrEmpty(key))
-                DataProviderProxy.SetProvider(new CloudHttpDataProvider(uri, key));
+                InitSvc.ApplyCloudProvider(uri, key);
         }
         else
         {
-            DataProviderProxy.SetProvider(LocalProvider);
+            InitSvc.ApplyLocalProvider();
         }
         StateHasChanged();
     }

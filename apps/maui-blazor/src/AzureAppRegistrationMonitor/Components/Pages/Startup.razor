@@ -4,8 +4,7 @@
 @using System.Text.Json
 @inject SettingsService SettingsSvc
 @inject CredentialRepository CredRepo
-@inject DelegatingDataProvider DataProviderProxy
-@inject LocalCliDataProvider LocalProvider
+@inject AppInitializationService InitSvc
 @inject NavigationManager Nav
 
 <div class="startup-page">
@@ -245,14 +244,12 @@
             SettingsSvc.Settings.CloudBaseUri = _cloudBaseUri;
             SettingsSvc.Settings.AppMode      = "cloud";
 
-            // Activate Cloud Mode provider
-            DataProviderProxy.SetProvider(
-                new CloudHttpDataProvider(_cloudBaseUri, _cloudFunctionKey));
+            InitSvc.ApplyCloudProvider(_cloudBaseUri, _cloudFunctionKey);
         }
         else
         {
             SettingsSvc.Settings.AppMode = "local";
-            DataProviderProxy.SetProvider(LocalProvider);
+            InitSvc.ApplyLocalProvider();
         }
 
         SettingsSvc.Settings.SetupCompleted = true;

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using AzureAppRegistrationMonitor.Models;
 
@@ -33,7 +34,7 @@ public class CloudHttpDataProvider : IDataProvider
     public async Task<IReadOnlyList<TenantProfile>> GetTenantsAsync()
     {
         var response = await _http.GetAsync("tenants");
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response);
         var json = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<List<TenantProfile>>(json, JsonOptions)
                ?? new List<TenantProfile>();
@@ -42,7 +43,6 @@ public class CloudHttpDataProvider : IDataProvider
     public async Task<ResultEnvelope<List<SecretSummary>>?> GetSecretsAsync(
         string tenantId, string? environmentName = null)
     {
-        // Function returns AppRegistrationSummary[]; flatten to SecretSummary[] for the list page.
         var nested = await GetAppsAsync(tenantId, environmentName);
         if (nested is null) return null;
         var flat = nested.Data.SelectMany(a => a.Secrets).ToList();
@@ -61,27 +61,34 @@ public class CloudHttpDataProvider : IDataProvider
     public async Task<bool> TriggerScanAsync(string tenantId)
     {
         var response = await _http.PostAsync($"tenants/{tenantId}/scan", null);
-        return response.StatusCode == System.Net.HttpStatusCode.Accepted;
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new InvalidOperationException(
+                $"Tenant {tenantId} is not configured in the Azure Function (no job in jobs.json). " +
+                "Run setup-tenant.ps1 first.");
+        if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
+            throw new InvalidOperationException("Function key invalid or expired. Check Settings.");
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            throw new InvalidOperationException($"HTTP {(int)response.StatusCode}: {body}");
+        }
+        return response.StatusCode == HttpStatusCode.Accepted;
     }
 
     public async Task<TenantProfile?> AddTenantAsync(CloudTenantRequest request)
     {
-        var content = new StringContent(
-            JsonSerializer.Serialize(request, JsonOptions),
-            System.Text.Encoding.UTF8, "application/json");
+        var content = Serialize(request);
         var response = await _http.PostAsync("tenants", content);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response);
         return JsonSerializer.Deserialize<TenantProfile>(
             await response.Content.ReadAsStringAsync(), JsonOptions);
     }
 
     public async Task<TenantProfile?> UpdateTenantAsync(string tenantId, CloudTenantRequest request)
     {
-        var content = new StringContent(
-            JsonSerializer.Serialize(request, JsonOptions),
-            System.Text.Encoding.UTF8, "application/json");
+        var content = Serialize(request);
         var response = await _http.PutAsync($"tenants/{tenantId}", content);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response);
         return JsonSerializer.Deserialize<TenantProfile>(
             await response.Content.ReadAsStringAsync(), JsonOptions);
     }
@@ -92,11 +99,47 @@ public class CloudHttpDataProvider : IDataProvider
         return response.IsSuccessStatusCode;
     }
 
+    // ── Private helpers ───────────────────────────────────────────────────────
+
     private async Task<ResultEnvelope<T>?> GetAsync<T>(string relativeUrl)
     {
         var response = await _http.GetAsync(relativeUrl);
-        response.EnsureSuccessStatusCode();
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        await EnsureSuccessAsync(response);
         var json = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<ResultEnvelope<T>>(json, JsonOptions);
     }
+
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode) return;
+
+        var body = await response.Content.ReadAsStringAsync();
+        var hint = response.StatusCode switch
+        {
+            HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                => " — Function key invalid or expired.",
+            HttpStatusCode.NotFound
+                => " — Resource not found. Tenant may not be configured in the Function.",
+            HttpStatusCode.InternalServerError
+                => " — Azure Function error. Check App Insights for details.",
+            _ => string.Empty,
+        };
+
+        // Try to extract the error field from JSON body
+        string message = $"HTTP {(int)response.StatusCode}{hint}";
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("error", out var err))
+                message = $"{err.GetString()}{hint}";
+        }
+        catch { /* body wasn't JSON */ }
+
+        throw new InvalidOperationException(message);
+    }
+
+    private static StringContent Serialize<T>(T obj) =>
+        new(JsonSerializer.Serialize(obj, JsonOptions),
+            System.Text.Encoding.UTF8, "application/json");
 }

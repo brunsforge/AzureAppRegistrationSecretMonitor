@@ -8,10 +8,10 @@
         <div class="aarm-sidebar-brand">
             <span class="aarm-brand-icon">🔑</span>
             <span class="aarm-brand-name">AARM</span>
-            <span class="aarm-mode-badge"
-                  title="@(SettingsSvc.Settings.AppMode == "cloud" ? "Cloud Mode" : "Local Mode")">
-                @(SettingsSvc.Settings.AppMode == "cloud" ? "☁" : "💻")
-            </span>
+        </div>
+        <div class="aarm-mode-banner @(SettingsSvc.Settings.AppMode == "cloud" ? "aarm-mode-cloud" : "aarm-mode-local")"
+             title="@(SettingsSvc.Settings.AppMode == "cloud" ? "Cloud Mode — data from Azure Function" : "Local Mode — CLI on this machine")">
+            @(SettingsSvc.Settings.AppMode == "cloud" ? "☁ Cloud Mode" : "💻 Local Mode")
         </div>
         <ul class="aarm-nav">
             <li>
@@ -40,6 +40,11 @@
                 </NavLink>
             </li>
             <li>
+                <NavLink href="/template-preview">
+                    <span>🎨</span> Templates
+                </NavLink>
+            </li>
+            <li>
                 <NavLink href="/settings">
                     <span>⚙️</span> Settings
                 </NavLink>
@@ -64,8 +69,11 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-        // Yield once to let AppInitializationService.InitializeAsync() complete.
-        await Task.Yield();
+
+        // Wait for InitializeAsync() to complete (it runs fire-and-forget in App.xaml.cs).
+        while (!InitSvc.IsInitialized)
+            await Task.Delay(50);
+
         if (InitSvc.SetupRequired && !Nav.Uri.Contains("/startup"))
             Nav.NavigateTo("/startup", replace: true);
     }

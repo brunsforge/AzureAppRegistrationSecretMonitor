@@ -46,6 +46,8 @@ var names = {
   ai: '${prefix}-${environment}-ai'
   plan: '${prefix}-${environment}-plan'
   fn: '${prefix}-${environment}-fn'
+  acsEmail: '${prefix}-${environment}-acs-email'
+  acsComm: '${prefix}-${environment}-acs'
 }
 
 // ── Well-known Azure built-in role definition IDs ─────────────────────────────
@@ -187,6 +189,50 @@ resource ai 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
+// ── Azure Communication Services — Email ──────────────────────────────────────
+// Optional: only used when mail targets are configured in jobs.json.
+// The UAMI needs the "Azure Communication Email Sender" role on the domain resource.
+
+resource acsEmail 'Microsoft.Communication/emailServices@2023-06-01-preview' = {
+  name: names.acsEmail
+  location: 'global'
+  tags: commonTags
+  properties: {
+    dataLocation: 'Europe'
+  }
+}
+
+resource acsDomain 'Microsoft.Communication/emailServices/domains@2023-06-01-preview' = {
+  parent: acsEmail
+  name: 'AzureManagedDomain'
+  location: 'global'
+  properties: {
+    domainManagement: 'AzureManaged'
+  }
+}
+
+resource acsComm 'Microsoft.Communication/communicationServices@2023-06-01-preview' = {
+  name: names.acsComm
+  location: 'global'
+  tags: commonTags
+  properties: {
+    dataLocation: 'Europe'
+    linkedDomains: [acsDomain.id]
+  }
+}
+
+// UAMI — Azure Communication Email Sender role (send mails on behalf of the domain)
+var acsEmailSenderRoleId = '13c37bcd-7901-4843-8640-cde88c83ae2a'
+resource uamiAcsEmailSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acsDomain.id, uami.id, acsEmailSenderRoleId)
+  scope: acsDomain
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acsEmailSenderRoleId)
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // ── Flex Consumption Hosting Plan ─────────────────────────────────────────────
 
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
@@ -293,6 +339,15 @@ resource fn 'Microsoft.Web/sites@2023-12-01' = {
           name: 'APPLICATIONINSIGHTS_ROLE_NAME'
           value: 'aarm-azure-function'
         }
+        // ── ACS Email (optional — only active when mailTargets are configured) ──
+        {
+          name: 'AARM_ACS_ENDPOINT'
+          value: acsComm.properties.hostName != null ? 'https://${acsComm.properties.hostName}' : ''
+        }
+        {
+          name: 'AARM_ACS_SENDER_EMAIL'
+          value: 'DoNotReply@${acsDomain.properties.fromSenderDomain}'
+        }
         // ── Functions runtime ─────────────────────────────────────────────────
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
@@ -331,3 +386,9 @@ output logAnalyticsWorkspaceId string = law.id
 
 @description('Application Insights connection string — already set as App Setting; shown here for reference.')
 output appInsightsConnectionString string = ai.properties.ConnectionString
+
+@description('ACS Communication Services endpoint — set as AARM_ACS_ENDPOINT App Setting.')
+output acsEndpoint string = 'https://${acsComm.properties.hostName}'
+
+@description('ACS sender email address — set as AARM_ACS_SENDER_EMAIL App Setting.')
+output acsSenderEmail string = 'DoNotReply@${acsDomain.properties.fromSenderDomain}'

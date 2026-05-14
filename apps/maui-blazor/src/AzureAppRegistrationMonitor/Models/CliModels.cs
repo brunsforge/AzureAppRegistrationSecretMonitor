@@ -24,7 +24,6 @@ public record TenantProfile(
     [property: JsonPropertyName("authMode")] string AuthMode,
     [property: JsonPropertyName("clientId")] string? ClientId,
     [property: JsonPropertyName("username")] string? Username,
-    [property: JsonPropertyName("defaultEnvironmentName")] string? DefaultEnvironmentName,
     [property: JsonPropertyName("logAnalyticsWorkspaceId")] string? LogAnalyticsWorkspaceId,
     [property: JsonPropertyName("createdAt")] string CreatedAt,
     [property: JsonPropertyName("updatedAt")] string UpdatedAt,

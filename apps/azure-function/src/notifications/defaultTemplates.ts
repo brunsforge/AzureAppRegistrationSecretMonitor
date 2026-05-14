@@ -18,7 +18,7 @@ export const DEFAULT_CRITICAL_TEMPLATE = JSON.stringify({
         },
         {
           type: 'TextBlock',
-          text: '{{tenantDisplayName}} — {{environmentName}}',
+          text: '{{tenantDisplayName}}',
           spacing: 'none',
           isSubtle: true,
         },
@@ -63,7 +63,7 @@ export const DEFAULT_EXPIRING_TEMPLATE = JSON.stringify({
         },
         {
           type: 'TextBlock',
-          text: '{{tenantDisplayName}} — {{environmentName}}',
+          text: '{{tenantDisplayName}}',
           spacing: 'none',
           isSubtle: true,
         },
@@ -100,7 +100,7 @@ export const DEFAULT_SUMMARY_TEMPLATE = JSON.stringify({
         },
         {
           type: 'TextBlock',
-          text: '{{tenantDisplayName}} — {{environmentName}}',
+          text: '{{tenantDisplayName}}',
           spacing: 'none',
           isSubtle: true,
         },
@@ -138,7 +138,7 @@ export const DEFAULT_ERROR_TEMPLATE = JSON.stringify({
         },
         {
           type: 'TextBlock',
-          text: '{{tenantDisplayName}} — {{environmentName}}',
+          text: '{{tenantDisplayName}}',
           spacing: 'none',
           isSubtle: true,
         },

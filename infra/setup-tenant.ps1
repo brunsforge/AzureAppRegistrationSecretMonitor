@@ -143,7 +143,27 @@ if ($useWebhooks) {
     if ($raw -ne '') { $webhookErrors = $raw }
 }
 
-# == 6. Log Analytics (optional) ===============================================
+# == 6. Mail-Benachrichtigungen (optional, erfordert ACS) ======================
+
+Write-Host ''
+$useMailTargets = AskYesNo 'E-Mail-Benachrichtigungen via ACS konfigurieren?' $false
+$mailTo         = $null
+$mailSendExpiring = $true
+$mailSendCritical = $true
+$mailSendStatus   = $false
+$mailSendError    = $true
+
+if ($useMailTargets) {
+    Write-Host 'Mail-Empfaenger (kommagetrennt)' -ForegroundColor Yellow
+    $raw = Ask 'Empfaenger-Adressen (z.B. ops@contoso.com,sec@contoso.com)'
+    if ($raw -ne '') { $mailTo = $raw }
+    $mailSendExpiring = AskYesNo 'Senden bei ablaufenden Secrets?' $true
+    $mailSendCritical = AskYesNo 'Senden bei kritischen Secrets?' $true
+    $mailSendStatus   = AskYesNo 'Senden nach jedem Scan (Statusbericht)?' $false
+    $mailSendError    = AskYesNo 'Senden bei Scan-Fehler?' $true
+}
+
+# == 7. Log Analytics (optional) ===============================================
 
 Write-Host ''
 $useLogAnalytics = AskYesNo 'Log Analytics / Sign-in-Log-Analyse aktivieren?' $false
@@ -153,7 +173,7 @@ if ($useLogAnalytics) {
     $laWorkspaceId = Ask 'Log Analytics Workspace-ID (GUID)'
 }
 
-# == 7. Zusammenfassung ========================================================
+# == 8. Zusammenfassung ========================================================
 
 $jobId = Slugify $tenantDisplayName
 
@@ -171,6 +191,8 @@ Write-Host "  Scan            : alle $intervalDays Tag(e) um $runAtUtc UTC"
 Write-Host "  Ablaufend ab    : $expiringDays Tagen   Kritisch ab: $criticalDays Tagen"
 $webhookInfo = if ($webhookAlerts) { 'Alerts konfiguriert' } else { 'keine' }
 Write-Host "  Webhooks        : $webhookInfo"
+$mailInfo = if ($mailTo) { $mailTo } else { 'keine' }
+Write-Host "  Mail-Targets    : $mailInfo"
 $laInfo = if ($laWorkspaceId) { $laWorkspaceId } else { 'nein' }
 Write-Host "  Log Analytics   : $laInfo"
 Write-Host ''
@@ -292,6 +314,15 @@ $newJob = [ordered]@{
         expiringWithinDays = [int]$expiringDays
         criticalWithinDays = [int]$criticalDays
     }
+    mailTargets = if ($mailTo) {
+        [ordered]@{
+            to              = @($mailTo -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+            sendOnExpiring  = $mailSendExpiring
+            sendOnCritical  = $mailSendCritical
+            sendOnStatus    = $mailSendStatus
+            sendOnError     = $mailSendError
+        }
+    } else { $null }
     logAnalytics = [ordered]@{
         workspaceId = $laWorkspaceId
         enabled     = ($null -ne $laWorkspaceId)
