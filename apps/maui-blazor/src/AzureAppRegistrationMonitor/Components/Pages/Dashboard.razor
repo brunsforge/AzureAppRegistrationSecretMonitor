@@ -111,36 +111,17 @@ else
     </div>
 
     @* ── Filtered table ─────────────────────────────────────────────────────── *@
-    @{
-        var tableApps = GetFilteredApps();
-        var tableTitle = _filter switch
-        {
-            "expired"  => "Expired secrets",
-            "exp30"    => "Secrets expiring within 30 days",
-            "exp90"    => "Secrets expiring within 90 days",
-            "highrisk" => "High / Critical apps",
-            _          => "Urgent attention"
-        };
-        var urgentApps = _filter == "all"
-            ? _apps.Where(a => a.RiskLevel is "Critical" or "High").ToList()
-            : tableApps;
-    }
-
-    @if (urgentApps.Any())
+    @if (UrgentApps.Any())
     {
-        <h3 style="font-size:1rem;font-weight:600;margin-bottom:.5rem">@tableTitle</h3>
+        <h3 style="font-size:1rem;font-weight:600;margin-bottom:.5rem">@FilterTitle</h3>
         <table class="aarm-table">
             <thead>
                 <tr>
-                    <th>Risk</th>
-                    <th>App</th>
-                    <th>Secrets</th>
-                    <th>Expired</th>
-                    <th>Expiring ≤30d</th>
+                    <th>Risk</th><th>App</th><th>Secrets</th><th>Expired</th><th>Expiring ≤30d</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var a in urgentApps.OrderByDescending(a => a.ExpiredSecretCount)
+                @foreach (var a in UrgentApps.OrderByDescending(a => a.ExpiredSecretCount)
                                              .ThenByDescending(a => a.ExpiringSecretCount)
                                              .Take(20))
                 {
@@ -154,10 +135,10 @@ else
                 }
             </tbody>
         </table>
-        @if (urgentApps.Count > 20)
+        @if (UrgentApps.Count > 20)
         {
             <p style="font-size:.78rem;color:var(--text-muted);margin-top:.5rem">
-                Showing top 20 of @urgentApps.Count.
+                Showing top 20 of @UrgentApps.Count.
                 <a href="/secrets/@Uri.EscapeDataString(_selectedTenant ?? "")" style="color:var(--accent)">View all →</a>
             </p>
         }
@@ -217,6 +198,19 @@ else
     }
 
     public void Dispose() => AppState.OnChange -= OnAppStateChanged;
+
+    private string FilterTitle => _filter switch
+    {
+        "expired"  => "Expired secrets",
+        "exp30"    => "Secrets expiring within 30 days",
+        "exp90"    => "Secrets expiring within 90 days",
+        "highrisk" => "High / Critical apps",
+        _          => "Urgent attention",
+    };
+
+    private List<AppRegistrationSummary> UrgentApps => _filter == "all"
+        ? (_apps?.Where(a => a.RiskLevel is "Critical" or "High").ToList() ?? new())
+        : GetFilteredApps();
 
     private void SetFilter(string filter)
     {
