@@ -100,6 +100,31 @@ dotnet workload install maui-windows
 dotnet restore
 ```
 
+### Publish (distribute without installer)
+
+```powershell
+# From repo root — produces a self-contained folder ready to zip and ship
+dotnet publish apps\maui-blazor\src\AzureAppRegistrationMonitor `
+  -f net10.0-windows10.0.19041.0 `
+  -c Release `
+  -r win-x64 `
+  --self-contained true `
+  -o publish\aarm-win-x64
+```
+
+Then zip the output:
+
+```powershell
+Compress-Archive -Path publish\aarm-win-x64\* `
+  -DestinationPath publish\aarm-win-x64.zip -Force
+```
+
+The recipient unpacks the zip and runs `AzureAppRegistrationMonitor.exe` — no .NET installation required.
+
+**Only prerequisite on the target machine:** WebView2 Runtime (Edge-based). This ships with Windows 11 and is installed automatically on Windows 10 via Windows Update since late 2021. On older machines download the Evergreen Installer from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/).
+
+> Debug builds and the published exe share the **same settings file** (`%USERPROFILE%\.aarm\ui-settings.json`). If you want a clean first-launch experience on your own machine after publishing, delete that file before starting the published exe (see [Reset to first-launch setup screen](#reset-to-first-launch-setup-screen) below).
+
 ---
 
 ## Run
@@ -306,14 +331,16 @@ apps/maui-blazor/src/AzureAppRegistrationMonitor/
 
 ---
 
-## Local storage (Local Mode)
+## Local storage
 
 | Location | What is stored |
 |---|---|
-| `~/.aarm/tenants.json` | Tenant profiles (shared with CLI) |
-| `~/.aarm/history/*.json` | Scan history (one file per scan) |
-| `~/.aarm/ui-settings.json` | UI preferences and active mode |
+| `%USERPROFILE%\.aarm\tenants.json` | Tenant profiles (shared with CLI) |
+| `%USERPROFILE%\.aarm\history\*.json` | Scan history (one file per scan) |
+| `%USERPROFILE%\.aarm\ui-settings.json` | UI preferences, active mode, Function URI, default tenant |
 | Windows Credential Manager | Client secrets, function key (Cloud Mode) |
+
+This location is **user-profile-bound**, not inside the app directory. Debug builds and published/distributed builds share the same files — if you run both, they will see each other's settings.
 
 In Local Mode, secret key material is written by the CLI and never stored in plain files.
 In Cloud Mode, credentials are sent to the Azure Function API and stored in Azure Key Vault —
@@ -353,6 +380,36 @@ The tray icon requires Windows App SDK runtime. Install it from:
 dotnet workload install maui-windows
 dotnet workload repair
 ```
+
+### Reset to first-launch setup screen
+
+The mode-selection screen (Local vs. Cloud, Function URI + key) appears only when no valid settings exist. To trigger it again — for example when testing a fresh install or switching to a new Azure Function — delete the settings file:
+
+```powershell
+Remove-Item "$env:USERPROFILE\.aarm\ui-settings.json"
+```
+
+The app will show the setup screen on the next launch.
+
+If you only want to re-enter the Azure Function URI and key without wiping all other settings, edit the file directly:
+
+```powershell
+notepad "$env:USERPROFILE\.aarm\ui-settings.json"
+```
+
+Set `appMode` to `""`, `cloudBaseUri` to `""` and save. The app will prompt for the connection details on next launch.
+
+The **function key** is stored separately in Windows Credential Manager, not in the JSON file. To remove it:
+
+```powershell
+# List AARM entries
+cmdkey /list | Select-String "aarm"
+
+# Delete a specific entry (replace <TargetName> with the name shown above)
+cmdkey /delete:<TargetName>
+```
+
+Or open **Control Panel → Credential Manager → Windows Credentials** and remove entries containing `aarm`.
 
 ### Build error: `net10.0-windows10.0.19041.0` not found
 
