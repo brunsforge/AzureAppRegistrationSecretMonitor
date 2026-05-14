@@ -4,6 +4,7 @@
 @inject IDataProvider DataProvider
 @inject TenantConfigRepository TenantRepo
 @inject AppStateService AppState
+@inject SettingsService SettingsSvc
 @implements IDisposable
 
 <PageTitle>Preflight — AARM</PageTitle>
@@ -23,7 +24,14 @@
     <button class="btn btn-primary btn-sm"
             @onclick="RunPreflightAsync"
             disabled="@(string.IsNullOrEmpty(_selectedTenant) || _loading)">
-        @(_loading ? "Running…" : "↻ Run preflight")
+        @if (_loading)
+        {
+            @(_scanPhase == "trigger" ? "Triggering scan…" : _scanPhase == "wait" ? "Waiting for result…" : "Running…")
+        }
+        else
+        {
+            @(SettingsSvc.Settings.AppMode == "cloud" ? "↻ Trigger scan + preflight" : "↻ Run preflight")
+        }
     </button>
 </div>
 
@@ -41,10 +49,23 @@ else if (_error is not null)
 else if (_result is null)
 {
     <div class="aarm-empty">
-        Select a tenant and click <strong>Run preflight</strong> to check which permissions are available.
-        <br /><br />
-        Preflight tests each capability individually against the real Entra API
-        and reports exactly which permissions are missing.
+        @if (SettingsSvc.Settings.AppMode == "cloud")
+        {
+            <p>No preflight data yet for this tenant.</p>
+            <p style="font-size:.82rem;color:var(--text-muted);margin-top:.5rem">
+                Click <strong>↻ Trigger scan + preflight</strong> to run the first scan.
+                This also validates credentials — if the tenant ID, Client ID or secret
+                are wrong, the preflight result will show <strong>Auth FAILED</strong>.
+            </p>
+        }
+        else
+        {
+            <p>Select a tenant and click <strong>Run preflight</strong> to check which permissions are available.</p>
+            <p style="font-size:.82rem;color:var(--text-muted);margin-top:.5rem">
+                Preflight tests each capability individually against the real Entra API
+                and reports exactly which permissions are missing.
+            </p>
+        }
     </div>
 }
 else
@@ -58,10 +79,28 @@ else
         </div>
         <small style="color:var(--text-muted)">
             Checked @(DateTimeOffset.TryParse(_result.CheckedAt, out var dt)
-                ? dt.LocalDateTime.ToString("HH:mm:ss")
+                ? dt.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")
                 : _result.CheckedAt)
         </small>
     </div>
+
+    @if (!_result.AuthValid)
+    {
+        <div class="aarm-error" style="margin-top:.75rem;font-size:.85rem">
+            <strong>Authentication failed.</strong>
+            Possible causes: wrong Tenant ID, wrong Client ID, expired or invalid Client Secret,
+            or missing App Registration in the target tenant.
+            @if (_result.Errors.Any())
+            {
+                <ul style="margin:.5rem 0 0;padding-left:1.2rem">
+                    @foreach (var e in _result.Errors)
+                    {
+                        <li>@e</li>
+                    }
+                </ul>
+            }
+        </div>
+    }
 
     <h3 style="font-size:.95rem;font-weight:600;margin-top:1.25rem;margin-bottom:.5rem">
         Capabilities (@GetEnabledCount() / @TotalCapabilities enabled)
@@ -124,6 +163,7 @@ else
     private string? _error;
     private PreflightResult? _result;
     private readonly List<string> _progressLines = new();
+    private string _scanPhase = "";
 
     private static int TotalCapabilities => 12;
     private int GetEnabledCount() => _result is null ? 0 : GetCapabilities().Count(c => c.Value);
@@ -185,21 +225,52 @@ else
         if (string.IsNullOrEmpty(_selectedTenant)) return;
         _loading = true;
         _error = null;
+        _result = null;
         _progressLines.Clear();
         DataProvider.ProgressMessage += OnProgress;
         try
         {
             var tenant = _tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant);
-            var envelope = await DataProvider.GetPreflightAsync(
-                tenant?.TenantId ?? _selectedTenant,
-                null);
-            _result = envelope?.Data;
+            var tenantId = tenant?.TenantId ?? _selectedTenant;
+
+            if (SettingsSvc.Settings.AppMode == "cloud")
+            {
+                // Cloud: trigger scan (runs preflight + secrets), then poll for result
+                _scanPhase = "trigger";
+                StateHasChanged();
+                await DataProvider.TriggerScanAsync(tenantId);
+
+                _scanPhase = "wait";
+                StateHasChanged();
+
+                // Poll up to 90s for the preflight result to appear
+                var deadline = DateTime.UtcNow.AddSeconds(90);
+                while (DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(4000);
+                    var env = await DataProvider.GetPreflightAsync(tenantId, null);
+                    if (env?.Data is not null)
+                    {
+                        _result = env.Data;
+                        break;
+                    }
+                }
+                if (_result is null)
+                    _error = "Scan triggered but no preflight result available after 90s. Check App Insights for errors.";
+            }
+            else
+            {
+                _scanPhase = "";
+                var envelope = await DataProvider.GetPreflightAsync(tenantId, null);
+                _result = envelope?.Data;
+            }
         }
         catch (Exception ex) { _error = ex.Message; }
         finally
         {
             DataProvider.ProgressMessage -= OnProgress;
             _loading = false;
+            _scanPhase = "";
         }
     }
 

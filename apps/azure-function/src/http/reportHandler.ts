@@ -58,7 +58,7 @@ function buildReportHtml(
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>AARM Report — ${esc(tenantId)} / ${esc(envName)}</title>
+<title>AARM Report — ${esc(tenantId)}</title>
 <style>
   body{font-family:system-ui,sans-serif;padding:2rem;color:#111;background:#fff}
   h1{font-size:1.4rem;margin-bottom:.25rem}
