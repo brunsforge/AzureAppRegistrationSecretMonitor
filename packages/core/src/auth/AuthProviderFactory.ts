@@ -10,7 +10,6 @@ import {
   useIdentityPlugin,
   type TokenCredential,
 } from '@azure/identity';
-import { cachePersistencePlugin } from '@azure/identity-cache-persistence';
 import { AuthError } from '../errors/index.js';
 import type { AuthMode } from './AuthMode.js';
 
@@ -89,9 +88,12 @@ export type AuthConfig =
   | WorkloadIdentityFederationAuthConfig;
 
 // Register the cache-persistence plugin once (idempotent).
-// Enables persistent token caching for interactive-browser and device-code modes
-// so the user does not need to re-authenticate on every CLI invocation.
-try { useIdentityPlugin(cachePersistencePlugin); } catch { /* unavailable in some environments */ }
+// Enables persistent token caching for interactive-browser and device-code modes.
+// Dynamic import: not available on Linux/Azure (keytar is a Windows/macOS native addon).
+try {
+  const { cachePersistencePlugin } = await import('@azure/identity-cache-persistence');
+  useIdentityPlugin(cachePersistencePlugin);
+} catch { /* unavailable on Linux / Azure — degraded gracefully */ }
 
 const TOKEN_CACHE_OPTIONS = { enabled: true };
 

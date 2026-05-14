@@ -29,7 +29,6 @@
 
       "tenantId": "<contoso-tenant-id>",
       "tenantDisplayName": "Contoso Corporation",
-      "environmentName": "PROD",
 
       "authMode": "client-secret",
       "clientId": "<app-registration-client-id-in-contoso-tenant>",

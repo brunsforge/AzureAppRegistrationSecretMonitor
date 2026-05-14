@@ -7,355 +7,309 @@ and the built-in HTML dashboard.
 
 ---
 
-## Azure Resources Required
+## Inhaltsverzeichnis
 
-### 1. Azure Function App
+1. [Azure-Ressourcen](#1-azure-ressourcen)
+2. [Deployment](#2-deployment)
+3. [App Settings](#3-app-settings)
+4. [App Registration Setup (Zieltenant)](#4-app-registration-setup-zieltenant)
+5. [Job-Konfiguration](#5-job-konfiguration)
+6. [HTTP-Endpoints](#6-http-endpoints)
+7. [Timer-Trigger](#7-timer-trigger)
+8. [Testen](#8-testen) — Postman-Collection & E2E-Suite
+9. [Local Development](#9-local-development)
 
-| Setting | Value |
-|---|---|
-| Runtime stack | Node.js 20 LTS |
-| OS | Linux |
-| Hosting plan | **Flex Consumption** (recommended) or Consumption |
-| Region | any |
+**Schnellstart mit Scripts:**
 
-### 2. Azure Storage Account
+```powershell
+# Alles in einem Schritt: Infra + Code deployen
+.\apps\azure-function\infra\deploy.ps1 -ResourceGroup aarm-dev-rg
 
-Used for both the Function runtime (`AzureWebJobsStorage`) and AARM data.
-
-Required containers (created automatically on first run if permissions are set):
-
-| Container | Purpose |
-|---|---|
-| `aarm-config` | `jobs.json`, notification templates |
-| `aarm-data` | Scan results, history, runtime state |
-
-### 3. Azure Key Vault
-
-Stores the client secrets used to authenticate against each target tenant.
-
-One secret per scanning job:
-
-```bash
-az keyvault secret set \
-  --vault-name <vault-name> \
-  --name aarm-contoso-prod \
-  --value "<client-secret-value>"
-```
-
-### 4. Application Insights
-
-Required for log forwarding, distributed tracing, and Live Metrics.
-
-```bash
-az monitor app-insights component create \
-  --app aarm-fn-insights \
-  --location <region> \
-  --resource-group <rg> \
-  --workspace <log-analytics-workspace-id>
-```
-
-Retrieve the connection string:
-```bash
-az monitor app-insights component show \
-  --app aarm-fn-insights \
-  --resource-group <rg> \
-  --query connectionString -o tsv
-```
-
-The connection string is used in the `APPLICATIONINSIGHTS_CONNECTION_STRING` App Setting.
-
-> **Tip:** Use an existing Log Analytics workspace (e.g. the one used for sign-in log queries)
-> so all AARM telemetry lands in the same workspace.
-
-### 5. User-Assigned Managed Identity (UAMI)
-
-A UAMI decouples the function's identity from the function app lifecycle.
-Role assignments survive redeployments and recreations.
-
-```bash
-# Create the UAMI
-az identity create \
-  --name aarm-fn-identity \
-  --resource-group <rg>
-
-# Assign to the Function App
-az functionapp identity assign \
-  --name <function-app-name> \
-  --resource-group <rg> \
-  --identities /subscriptions/<sub>/resourcegroups/<rg>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/aarm-fn-identity
+# Ersten Tenant interaktiv einrichten
+.\infra\setup-tenant.ps1 -ResourceGroup aarm-dev-rg
 ```
 
 ---
 
-## Role Assignments
+## 1. Azure-Ressourcen
 
-Grant the UAMI the following roles:
+Alle Ressourcen werden via Bicep in einem Schritt bereitgestellt:
 
-### Storage Account
-
-```bash
-UAMI_PRINCIPAL_ID=$(az identity show --name aarm-fn-identity --resource-group <rg> --query principalId -o tsv)
-STORAGE_ID=$(az storage account show --name <account> --resource-group <rg> --query id -o tsv)
-
-az role assignment create \
-  --assignee $UAMI_PRINCIPAL_ID \
-  --role "Storage Blob Data Contributor" \
-  --scope $STORAGE_ID
+```powershell
+cd infra
+az deployment group create `
+  --resource-group aarm-dev-rg `
+  --template-file main.bicep `
+  --parameters main.bicepparam `
+  --name aarm-deploy
 ```
 
-### Key Vault
+Das Deployment erstellt:
 
-The UAMI needs **Key Vault Secrets Officer** (not just Secrets User) so it can create, rotate and
-delete scanning credentials via the API, in addition to reading them at scan time.
-
-```bash
-KV_ID=$(az keyvault show --name <vault-name> --query id -o tsv)
-
-az role assignment create \
-  --assignee $UAMI_PRINCIPAL_ID \
-  --role "Key Vault Secrets Officer" \
-  --scope $KV_ID
-```
-
----
-
-## Function App Settings
-
-Configure these Application Settings on the Function App:
-
-### Infrastructure (set once)
-
-| Setting | Value | Notes |
+| Ressource | Name (dev) | Zweck |
 |---|---|---|
-| `AZURE_CLIENT_ID` | `<uami-client-id>` | Client ID of the UAMI. Used by `@azure/identity` and Flex Consumption AzureWebJobsStorage auth. |
-| `AzureWebJobsStorage__accountName` | `<storage-account-name>` | Flex Consumption: UAMI-based storage auth (no connection string needed). |
-| `AARM_STORAGE_URI` | `https://<account>.blob.core.windows.net` | Storage account URI for AARM data containers. |
-| `AARM_KEYVAULT_URI` | `https://<vault-name>.vault.azure.net` | Key Vault URI. The function reads, creates and deletes scanning credentials via SDK using this URI and the UAMI. |
-| `AARM_DASHBOARD_URL` | `https://<function-app>.azurewebsites.net/api/dashboard` | Used in Teams notification card "Open Dashboard" links. |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | `InstrumentationKey=...;IngestionEndpoint=...` | Application Insights connection string. Enables automatic log forwarding, distributed tracing and Live Metrics. Leave empty to disable (not recommended in production). |
-| `APPLICATIONINSIGHTS_ROLE_NAME` | `aarm-azure-function` | Sets the cloud role name in the Application Map. Distinguishes AARM from other services in a shared AI workspace. |
-| `FUNCTIONS_EXTENSION_VERSION` | `~4` | Required. |
+| Function App | `aarm-dev-fn` | Hosting der Azure Function (Flex Consumption) |
+| Storage Account | `aarmdev<hash>` | Deployment-Packages, Blob-Daten (`aarm-config`, `aarm-data`) |
+| Key Vault | `aarm-dev-kv` | Scanning-Credentials (Client Secrets der Zieltabellen) |
+| Log Analytics Workspace | `aarm-dev-law` | Basis für Application Insights |
+| Application Insights | `aarm-dev-ai` | Telemetrie und Fehlerprotokollierung |
+| User-Assigned Managed Identity (UAMI) | `aarm-dev-identity` | Passwortlose Authentifizierung gegen Storage und Key Vault |
+| Hosting Plan | `aarm-dev-plan` | Flex Consumption (FC1, Linux) |
 
-Add all infrastructure settings via CLI:
+Tatsächliche Namen nach dem Deployment abfragen:
 
-```bash
-az functionapp config appsettings set \
-  --name <function-app-name> \
-  --resource-group <rg> \
-  --settings \
-    "AZURE_CLIENT_ID=<uami-client-id>" \
-    "AzureWebJobsStorage__accountName=<storage-account-name>" \
-    "AARM_STORAGE_URI=https://<account>.blob.core.windows.net" \
-    "AARM_KEYVAULT_URI=https://<vault-name>.vault.azure.net" \
-    "AARM_DASHBOARD_URL=https://<fn>.azurewebsites.net/api/dashboard" \
-    "APPLICATIONINSIGHTS_CONNECTION_STRING=<connection-string>" \
-    "APPLICATIONINSIGHTS_ROLE_NAME=aarm-azure-function"
+```powershell
+az deployment group show `
+  --resource-group aarm-dev-rg `
+  --name aarm-deploy `
+  --query properties.outputs -o json
 ```
-
-### Scanning credentials
-
-Scanning credentials (client secrets for each target tenant) are stored **directly in Key Vault** using
-the UAMI — no App Settings needed per tenant.
-
-The function reads credentials at scan time via the Key Vault SDK using `AARM_KEYVAULT_URI`.
-The naming convention for secrets is `aarm-{jobId}` (e.g. `aarm-contoso-prod`).
-
-**Recommended: use the MAUI Cloud Mode Add Tenant form.** It sends the credential to the function
-API which stores it in Key Vault automatically.
-
-**Or via Azure CLI:**
-```bash
-az keyvault secret set \
-  --vault-name <vault-name> \
-  --name aarm-contoso-prod \
-  --value "<client-secret-value>"
-```
-Then set `"credentialRef": "aarm-contoso-prod"` in `jobs.json`.
 
 ---
 
-## App Registration Setup (per target tenant)
+## 2. Deployment
 
-In each tenant that the function will scan, create an App Registration with these permissions:
+### Voraussetzungen
 
-| Permission | Type | Purpose |
+- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local) global installiert:
+  ```powershell
+  npm install -g azure-functions-core-tools@4 --unsafe-perm true
+  ```
+- Node.js 20 (empfohlen — der Runtime der Function App)
+- `az login` ausgeführt
+
+### Warum ein separates `_deploy`-Verzeichnis?
+
+Das Repository nutzt **npm Workspaces**. Alle Packages (`@azure/functions`, Azure SDKs etc.) sind im **Root-`node_modules/`** gehoisted, nicht im lokalen `apps/azure-function/node_modules/`. `func azure functionapp publish` packt nur das lokale Verzeichnis — ohne Root-`node_modules/` fehlen alle Abhängigkeiten im Deployment-Zip.
+
+Lösung: ein separates `_deploy`-Verzeichnis mit:
+- einer eigenen `package.json` (nur `@azure/functions` als Dependency, keine Workspace-Referenz)
+- einem frischen `npm install` darin
+- dem esbuild-Bundle (`dist/index.js`), das alle restlichen Abhängigkeiten einbettet
+
+### Build-Prozess
+
+1. **Core-Package bauen** (Abhängigkeit der Function):
+   ```powershell
+   cd C:\Daten\source\AzureAppRegistrationSecretMonitor
+   npm run build --workspace packages/core
+   ```
+
+2. **esbuild-Bundle erstellen** (aus `apps/azure-function`):
+   ```powershell
+   cd apps\azure-function
+   node esbuild.mjs
+   ```
+   Ausgabe: `dist/index.js` (~2,4 MB, enthält alle Dependencies außer `@azure/functions`)
+
+3. **Bundle in `_deploy` kopieren**:
+   ```powershell
+   Copy-Item dist\index.js _deploy\dist\index.js -Force
+   ```
+
+4. **`_deploy` beim ersten Mal einrichten** (einmalig oder nach `npm install` im Root):
+   ```powershell
+   cd _deploy
+   npm install
+   ```
+
+### Deployment-Befehl
+
+```powershell
+cd _deploy
+func azure functionapp publish aarm-dev-fn --typescript
+```
+
+Der `--build local`-Flag ist nicht nötig — das Bundle ist bereits fertig.
+
+### Wichtige Hinweise und Fallstricke
+
+| Problem | Ursache | Lösung |
 |---|---|---|
-| `Application.Read.All` | Application | List App Registrations |
-| `AuditLog.Read.All` | Application | Sign-in logs (optional, for usage analysis) |
+| `Cannot find module '@azure/functions'` | Workspace-Hoisting: `@azure/functions` liegt nur im Root-`node_modules/` | Aus `_deploy` deployen (hat eigenes `node_modules/@azure/functions`) |
+| `Dynamic require of "net" is not supported` | CJS-Packages (Azure SDK) werden in ESM gebündelt, `require` ist im ESM-Kontext undefined | `createRequire`-Banner in `esbuild.mjs` (bereits eingebaut) |
+| `Cannot find module 'cookie'` | `@azure/functions` hat transitive Abhängigkeiten, die manuell kopierte Packages nicht enthalten | `npm install` in `_deploy` installiert alle transitiven Deps korrekt |
+| `Worker_runtime` App Setting nicht erlaubt | Flex Consumption verwaltet den Runtime intern | `FUNCTIONS_WORKER_RUNTIME` darf **nicht** in App Settings gesetzt sein |
+| Keine Functions registriert trotz erfolgreichem Deployment | Top-Level-`await` im Entry-Module bricht die Modulinitialisierung ab | `initializeStorage()` wird nicht-blockierend aufgerufen (`.catch()`) |
+| `@azure/identity-cache-persistence` nicht gefunden | Statischer Import eines Windows/macOS-Native-Addons in ESM | Wird dynamisch importiert (`try { await import(...) } catch {}`) |
+| Health-Check `Unauthorized` nach Deployment | Flex Consumption schränkt `/admin`-Endpoint ein | Kein Fehler — das Deployment war erfolgreich, Meldung ignorieren |
 
-Steps:
-```bash
-# In the TARGET tenant (not the function's host tenant)
-az ad app create --display-name "AARM Scanner"
-az ad app permission add --id <app-id> --api 00000003-0000-0000-c000-000000000000 \
-  --api-permissions 9a5d68dd-52b0-4cc2-bd40-abcf44ac3a30=Role  # Application.Read.All
-# Grant admin consent
-az ad app permission admin-consent --id <app-id>
-# Create client secret
-az ad app credential reset --id <app-id> --display-name "aarm-scanner"
-# → store the returned secret value in Key Vault (see above)
+---
+
+## 3. App Settings
+
+Alle Settings werden vom Bicep-Deployment automatisch gesetzt. Zur Referenz:
+
+| Setting | Wert | Beschreibung |
+|---|---|---|
+| `AZURE_CLIENT_ID` | Client-ID der UAMI | Wird von `@azure/identity` für passwortlose Auth verwendet |
+| `AzureWebJobsStorage__accountName` | Storage-Account-Name | Flex Consumption: UAMI-basierte Storage-Auth (kein Connection String) |
+| `AzureWebJobsStorage__blobServiceUri` | Blob-Endpoint-URL | Flex Consumption: UAMI-basierte Storage-Auth |
+| `AzureWebJobsStorage__credential` | `managedidentity` | Auth-Methode |
+| `AzureWebJobsStorage__clientId` | Client-ID der UAMI | Spezifische UAMI für Storage-Auth |
+| `AARM_STORAGE_URI` | `https://<account>.blob.core.windows.net` | Storage URI für AARM-Daten-Container |
+| `AARM_KEYVAULT_URI` | `https://<vault>.vault.azure.net/` | Key Vault URI für Scanning-Credentials |
+| `AARM_DASHBOARD_URL` | `https://<fn>.azurewebsites.net/api/dashboard` | Wird in Teams-Benachrichtigungen verlinkt |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | `InstrumentationKey=...` | Application Insights Verbindungszeichenfolge |
+| `APPLICATIONINSIGHTS_ROLE_NAME` | `aarm-azure-function` | Cloud-Rollenname in Application Map |
+| `FUNCTIONS_EXTENSION_VERSION` | `~4` | Functions Runtime Version |
+
+**Nicht setzen:**
+- `FUNCTIONS_WORKER_RUNTIME` — von Flex Consumption verboten (wird intern verwaltet)
+
+---
+
+## 4. App Registration Setup (Zieltenant)
+
+Pro Zieltenant eine App Registration anlegen:
+
+```powershell
+# Im ZIELTENANT (nicht im Function-Host-Tenant)
+$app = az ad app create --display-name "AARM Scanner" | ConvertFrom-Json
+
+# Application.Read.All (9a5d68dd-...)
+az ad app permission add `
+  --id $app.id `
+  --api 00000003-0000-0000-c000-000000000000 `
+  --api-permissions 9a5d68dd-52b0-4cc2-bd40-abcf44ac3a30=Role
+
+# Admin Consent erteilen
+az ad app permission admin-consent --id $app.id
+
+# Client Secret erstellen
+$cred = az ad app credential reset --id $app.id --display-name "aarm-scanner" | ConvertFrom-Json
+
+# Secret in Key Vault speichern
+az keyvault secret set `
+  --vault-name aarm-dev-kv `
+  --name "aarm-<job-id>" `
+  --value $cred.password
+```
+
+Optional für Sign-in-Log-Analyse (`AuditLog.Read.All`):
+```powershell
+az ad app permission add `
+  --id $app.id `
+  --api 00000003-0000-0000-c000-000000000000 `
+  --api-permissions b0afded3-3588-46d8-8b3d-9842eff778da=Role
 ```
 
 ---
 
-## Job Configuration
+## 5. Job-Konfiguration
 
-The function reads all job configurations from a single file: `aarm-config/jobs.json` in Blob Storage.
+Die Function liest alle Jobs aus einer einzigen Datei: `aarm-config/jobs.json` in Blob Storage.
 
-Upload the file:
-```bash
-az storage blob upload \
-  --account-name <storage-account> \
-  --container-name aarm-config \
-  --name jobs.json \
-  --file references/examples/jobs.json \
+**Empfohlen — interaktives Setup-Script** (fragt alle Parameter ab, speichert Secret in Key Vault, lädt `jobs.json` hoch):
+
+```powershell
+.\infra\setup-tenant.ps1 -ResourceGroup aarm-dev-rg
+```
+
+**Manuell** — Beispieldatei hochladen und anpassen:
+
+```powershell
+# Beispiel als Ausgangspunkt kopieren und Platzhalter ersetzen
+Copy-Item references\examples\jobs.json jobs.json
+
+az storage blob upload `
+  --account-name <storage-account> `
+  --container-name aarm-config `
+  --name jobs.json `
+  --file jobs.json `
+  --overwrite `
   --auth-mode login
 ```
 
-See `references/examples/jobs.json` for a complete working example with two jobs.
+Ein vollständig kommentiertes Beispiel mit zwei Jobs (Client Secret + Workload Identity Federation) liegt unter [`references/examples/jobs.json`](../../../references/examples/jobs.json).
 
-### Schema reference
+### Schema
 
-`jobs.json` is a JSON object with a `jobs` array. Each entry describes one scanning job.
+`jobs.json` ist ein JSON-Objekt mit einem `jobs`-Array:
 
-#### Identity fields
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `id` | string | yes | Unique job identifier. Used to name the runtime state blob and the Key Vault secret (`aarm-{id}`). |
-| `enabled` | boolean | yes | `false` pauses the job without removing it. The timer tick skips disabled jobs. |
-| `tenantId` | string | yes | Azure AD tenant ID (GUID) of the **target** tenant — the one being scanned. This is not the function's host tenant. |
-| `tenantDisplayName` | string | yes | Human-readable name shown in notifications and the dashboard. |
-| `environmentName` | string | yes | User-defined label for this tenant/environment combination, e.g. `PROD`, `DEV`. |
-
-#### Authentication fields
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `authMode` | string | yes | How the function authenticates to the target tenant. See auth modes below. |
-| `clientId` | string | yes | Client ID of the App Registration **in the target tenant** that the function authenticates as. |
-| `credentialRef` | string | conditional | Key Vault secret name holding the credential. Convention: `aarm-{jobId}`. Required for `client-secret` and `certificate`; omit for `workload-identity-federation`. |
-
-**Auth modes:**
-
-| Mode | Credential needed | Notes |
-|---|---|---|
-| `workload-identity-federation` | None | Preferred. The target tenant admin must configure a federated credential trust on their App Registration, pointing to this function's UAMI. No App Setting required. |
-| `client-secret` | App Setting `AARM_SECRET_*` → Key Vault ref | Standard fallback. Set `credentialRef` to the App Setting name. |
-| `certificate` | App Setting `AARM_SECRET_*` → Key Vault ref | Higher security. Same `credentialRef` pattern; Key Vault holds the certificate. |
-
-**`credentialRef` naming convention:**
-
-The App Setting name must follow `AARM_SECRET_` + job `id` in UPPER_SNAKE_CASE (hyphens → underscores):
-
-```
-job id "contoso-prod"  →  credentialRef "AARM_SECRET_CONTOSO_PROD"
-job id "fabrikam-dev"  →  credentialRef "AARM_SECRET_FABRIKAM_DEV"
-```
-
-The App Setting value is a Key Vault reference:
-```
-@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/<name>/)
+```json
+{
+  "jobs": [
+    {
+      "id": "contoso-prod",
+      "enabled": true,
+      "tenantId": "<tenant-guid>",
+      "tenantDisplayName": "Contoso Corporation",
+      "environmentName": "PROD",
+      "authMode": "client-secret",
+      "clientId": "<client-guid>",
+      "credentialRef": "aarm-contoso-prod",
+      "schedule": {
+        "intervalDays": 1,
+        "runAtUtc": "06:00"
+      },
+      "teamsWebhooks": {
+        "status": null,
+        "alerts": "https://...",
+        "errors": null
+      },
+      "notificationThresholds": {
+        "expiringWithinDays": 30,
+        "criticalWithinDays": 7
+      },
+      "logAnalytics": {
+        "workspaceId": null,
+        "enabled": false
+      }
+    }
+  ]
+}
 ```
 
-#### Schedule fields
+#### Felder
 
-| Field | Type | Required | Description |
+| Feld | Typ | Pflicht | Beschreibung |
 |---|---|---|---|
-| `schedule.intervalDays` | number | yes | How many days between runs. `1` = daily, `7` = weekly. The timer checks every 5 minutes whether a run is due. |
-| `schedule.runAtUtc` | string | yes | Preferred start time in UTC, format `HH:mm`. Example: `"06:00"`. The function runs at the first timer tick after this time on the due day. |
-
-#### Teams webhook fields
-
-All webhook fields are optional. Omit or set to `null` to disable that notification channel.
-
-| Field | Type | When fired |
-|---|---|---|
-| `teamsWebhooks.status` | string\|null | After every successful scan — sends the summary template. |
-| `teamsWebhooks.alerts` | string\|null | When critical or expiring secrets are found — sends the critical or expiring template depending on severity. |
-| `teamsWebhooks.errors` | string\|null | When the scan fails — sends the error template. |
-
-#### Notification template fields
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `notificationTemplates.expiring` | string\|null | `null` | Blob name in `aarm-config/templates/`. `null` uses the built-in `default-expiring` Adaptive Card. |
-| `notificationTemplates.critical` | string\|null | `null` | Custom template for critical secrets. |
-| `notificationTemplates.summary` | string\|null | `null` | Custom template for regular summary (sent to `teamsWebhooks.status`). |
-| `notificationTemplates.error` | string\|null | `null` | Custom template for scan failures. |
-
-Custom templates are Adaptive Card v1.4 JSON files rendered with [Handlebars.js](https://handlebarsjs.com/).
-
-**Available template placeholders:**
-
-| Placeholder | Value |
-|---|---|
-| `{{tenantDisplayName}}` | From the job config |
-| `{{environmentName}}` | From the job config |
-| `{{scanTimestamp}}` | ISO 8601 scan completion time |
-| `{{secretCount}}` | Total secrets found |
-| `{{expiringCount}}` | Secrets expiring within `expiringWithinDays` |
-| `{{criticalCount}}` | Secrets expiring within `criticalWithinDays` |
-| `{{dashboardUrl}}` | Value of the `AARM_DASHBOARD_URL` App Setting |
-
-See `references/examples/template-critical-custom.json` for a full custom template example.
-
-#### Notification threshold fields
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `notificationThresholds.expiringWithinDays` | number | `30` | Secrets expiring within this many days are counted as "expiring" and trigger the alerts webhook. |
-| `notificationThresholds.criticalWithinDays` | number | `7` | Secrets expiring within this many days are counted as "critical" and trigger the critical template instead of the expiring template. |
-
-#### Log Analytics fields
-
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `logAnalytics.workspaceId` | string\|null | `null` | Log Analytics workspace ID for the target tenant. Used during preflight to check sign-in log access. You can use the `logAnalyticsWorkspaceId` output from the Bicep deployment for the function's own workspace. |
-| `logAnalytics.enabled` | boolean | `false` | Whether to include Log Analytics capability checks in the preflight run for this job. |
+| `id` | string | ja | Eindeutige Job-ID. Wird als Blob-Name und Key-Vault-Secret-Name (`aarm-{id}`) verwendet. Nur Kleinbuchstaben, Ziffern und Bindestriche. |
+| `enabled` | boolean | ja | `false` pausiert den Job ohne ihn zu löschen. |
+| `tenantId` | string | ja | GUID des **Zieltenants** (nicht des Function-Host-Tenants). |
+| `tenantDisplayName` | string | ja | Anzeigename für Benachrichtigungen und Dashboard. |
+| `environmentName` | string | ja | Frei wählbares Label, z. B. `PROD`, `DEV`. Differenziert Scan-Ergebnisse in Blob Storage. |
+| `authMode` | string | ja | `client-secret`, `certificate` oder `workload-identity-federation`. |
+| `clientId` | string | ja | Client-ID der App Registration **im Zieltenant**. |
+| `credentialRef` | string | bedingt | Key-Vault-Secret-Name. Pflicht für `client-secret` und `certificate`. |
+| `schedule.intervalDays` | number | ja | Tage zwischen zwei Scans. `1` = täglich, `7` = wöchentlich. |
+| `schedule.runAtUtc` | string | ja | Bevorzugte Startzeit in UTC (`HH:mm`). Der Timer prüft alle 5 Minuten ob ein Scan fällig ist. |
+| `teamsWebhooks.status` | string\|null | nein | Webhook für regulären Scan-Statusbericht. |
+| `teamsWebhooks.alerts` | string\|null | nein | Webhook für ablaufende oder kritische Secrets. |
+| `teamsWebhooks.errors` | string\|null | nein | Webhook bei Scan-Fehlern. |
+| `notificationThresholds.expiringWithinDays` | number | nein | Standard: `30`. Secrets innerhalb dieser Tage gelten als "ablaufend". |
+| `notificationThresholds.criticalWithinDays` | number | nein | Standard: `7`. Secrets innerhalb dieser Tage gelten als "kritisch". |
+| `logAnalytics.workspaceId` | string\|null | nein | Workspace-ID für Sign-in-Log-Analyse. |
+| `logAnalytics.enabled` | boolean | nein | Standard: `false`. |
 
 ---
 
-## HTTP Endpoints
+## 6. HTTP-Endpoints
 
-### Authentication
+### Authentifizierung
 
-All endpoints use **Function Key authentication** (`authLevel: 'function'`) except `/api/dashboard`
-which is `authLevel: 'anonymous'` (the key is stored client-side in browser `localStorage`).
+Alle Endpoints außer `/api/dashboard` verwenden **Function Key Authentication** (`authLevel: function`).
 
-Include the key in the request header:
+Function Key im Header:
 ```
-x-functions-key: <your-function-key>
-```
-
-Retrieve the default function key:
-```bash
-az functionapp keys list --name <fn-name> --resource-group <rg>
+x-functions-key: <key>
 ```
 
-### Route overview
-
-| Method | Route | Description |
-|---|---|---|
-| GET | `/api/status` | Health check, job count, last scan time |
-| GET | `/api/tenants` | List tenants with profile data |
-| POST | `/api/tenants` | Add tenant/job + store credential in KV |
-| PUT | `/api/tenants/{tenantId}` | Update tenant/job + optional credential rotation |
-| DELETE | `/api/tenants/{tenantId}` | Delete tenant/job + purge KV secret |
-| GET | `/api/tenants/{tenantId}/secrets` | Latest secret scan (`ResultEnvelope<AppRegistrationSummary[]>`) |
-| GET | `/api/tenants/{tenantId}/preflight` | Latest preflight result |
-| POST | `/api/tenants/{tenantId}/scan` | Trigger immediate scan + send Teams notifications |
-| GET | `/api/dashboard` | Interactive HTML dashboard (client-side JS, anonymous) |
-| GET | `/api/report?tenant=&env=` | Server-rendered HTML snapshot |
+Key abrufen:
+```powershell
+az functionapp keys list --name aarm-dev-fn --resource-group aarm-dev-rg --query "functionKeys.default" -o tsv
+```
 
 ---
 
 ### GET `/api/status`
 
-**Purpose:** Health check. Confirms the function is running, can reach Blob Storage, and shows
-how many jobs are configured. Use this to verify a new deployment or test connectivity from MAUI.
+**Zweck:** Health-Check. Bestätigt dass die Function läuft, Storage erreichbar ist und zeigt Job-Anzahl.
 
-**Response:**
+**Auth:** Function Key
+
+**Response 200:**
 ```json
 {
   "healthy": true,
@@ -367,31 +321,33 @@ how many jobs are configured. Use this to verify a new deployment or test connec
 }
 ```
 
-| Field | Description |
+| Feld | Beschreibung |
 |---|---|
-| `healthy` | `false` if an exception occurred reading storage |
-| `jobCount` | Total jobs in `jobs.json` (enabled + disabled) |
-| `enabledJobCount` | Jobs with `enabled: true` |
-| `lastScanAt` | ISO 8601 timestamp of the most recent completed scan across all jobs; `null` if no scan has run yet |
+| `healthy` | `false` wenn Storage nicht erreichbar |
+| `jobCount` | Alle Jobs in `jobs.json` (enabled + disabled) |
+| `enabledJobCount` | Nur Jobs mit `enabled: true` |
+| `lastScanAt` | ISO 8601 des letzten abgeschlossenen Scans; `null` wenn noch kein Scan gelaufen |
+| `storageConnected` | `true` wenn Storage-Abfrage erfolgreich war |
 
 ---
 
 ### GET `/api/tenants`
 
-**Purpose:** Lists all tenant/environment combinations for which scan results exist in
-`aarm-data/latest/`. Used by the MAUI Cloud Mode tenant selector and the HTML dashboard.
+**Zweck:** Listet alle konfigurierten Tenants. Wird von MAUI Cloud Mode und Dashboard verwendet.
 
-**Response:**
+**Auth:** Function Key
+
+**Response 200:** Array von Tenant-Profilen
 ```json
 [
   {
-    "tenantId": "<contoso-tenant-id>",
+    "tenantId": "<tenant-guid>",
     "displayName": "Contoso Corporation",
     "authMode": "client-secret",
-    "clientId": "<client-id>",
+    "clientId": "<client-guid>",
     "username": null,
     "defaultEnvironmentName": "PROD",
-    "logAnalyticsWorkspaceId": "<workspace-id>",
+    "logAnalyticsWorkspaceId": null,
     "createdAt": "2026-05-07T06:00:00.000Z",
     "updatedAt": "2026-05-07T06:00:00.000Z",
     "lastPreflightAt": "2026-05-07T06:00:00.000Z",
@@ -400,49 +356,124 @@ how many jobs are configured. Use this to verify a new deployment or test connec
 ]
 ```
 
-One entry per unique `tenantId`. If the same tenant has multiple jobs (different `environmentName`
-values in `jobs.json`), only the first job's metadata is returned and `defaultEnvironmentName`
-identifies the primary environment.
+Ein Eintrag pro eindeutiger `tenantId`. Bei mehreren Jobs für denselben Tenant wird nur der erste berücksichtigt. Gibt `[]` zurück wenn keine Jobs konfiguriert sind.
 
-**Design note:** MAUI has no environment selector in its UI. Environments are an internal routing
-detail of the function (they differentiate scan results in Blob Storage when the same tenant is
-scanned with different job configurations). MAUI always uses `defaultEnvironmentName` transparently.
+---
 
-Returns `[]` if no jobs are configured yet.
+### POST `/api/tenants`
+
+**Zweck:** Fügt einen neuen Tenant/Job hinzu. Speichert den Scanning-Credential in Key Vault.
+
+**Auth:** Function Key
+
+**Request Body:**
+```json
+{
+  "tenantId": "<tenant-guid>",
+  "tenantDisplayName": "Contoso Corporation",
+  "authMode": "client-secret",
+  "clientId": "<client-guid>",
+  "credentialValue": "<client-secret>",
+  "environmentName": "PROD",
+  "schedule": {
+    "intervalDays": 1,
+    "runAtUtc": "06:00"
+  },
+  "teamsWebhooks": {
+    "status": null,
+    "alerts": "https://...",
+    "errors": null
+  },
+  "notificationThresholds": {
+    "expiringWithinDays": 30,
+    "criticalWithinDays": 7
+  },
+  "logAnalytics": {
+    "workspaceId": null,
+    "enabled": false
+  }
+}
+```
+
+| Feld | Pflicht | Beschreibung |
+|---|---|---|
+| `tenantId` | ja | GUID des Zieltenants |
+| `tenantDisplayName` | ja | Anzeigename |
+| `authMode` | ja | `client-secret` oder `workload-identity-federation` |
+| `clientId` | bedingt | Pflicht bei `client-secret` |
+| `credentialValue` | bedingt | Client-Secret-Wert — wird in Key Vault gespeichert, nie persistiert |
+| `environmentName` | nein | Standard: `default` |
+| `schedule.intervalDays` | nein | Standard: `1` |
+| `schedule.runAtUtc` | nein | Standard: `06:00` |
+
+**Response 201:** Angelegtes Tenant-Profil (wie `GET /api/tenants` Eintrag)
+
+**Response 400:** Pflichtfelder fehlen oder ungültig
+
+**Response 409:** Tenant bereits vorhanden — PUT verwenden
+
+---
+
+### PUT `/api/tenants/{tenantId}`
+
+**Zweck:** Aktualisiert Job-Konfiguration eines bestehenden Tenants. Rotiert optional den Key-Vault-Credential.
+
+**Auth:** Function Key
+
+**Path-Parameter:** `tenantId` (GUID)
+
+**Request Body:** Gleiche Felder wie POST. `credentialValue` weglassen um den bestehenden Credential beizubehalten.
+
+**Response 200:** Aktualisiertes Tenant-Profil
+
+**Response 404:** Tenant nicht gefunden
+
+---
+
+### DELETE `/api/tenants/{tenantId}`
+
+**Zweck:** Entfernt den Job aus `jobs.json` und löscht den Key-Vault-Credential. Der Runtime-State-Blob bleibt für Audit-Zwecke erhalten.
+
+**Auth:** Function Key
+
+**Path-Parameter:** `tenantId` (GUID)
+
+**Response 204:** Erfolgreich gelöscht
+
+**Response 404:** Tenant nicht gefunden
 
 ---
 
 ### GET `/api/tenants/{tenantId}/secrets`
 
-**Purpose:** Returns the latest secret scan result for a tenant as a
-`ResultEnvelope<AppRegistrationSummary[]>`. The function resolves the correct environment
-internally from the job config. This is the primary data endpoint consumed by
-the MAUI Cloud Mode and the HTML dashboard.
+**Zweck:** Gibt das letzte Scan-Ergebnis für einen Tenant zurück. Primärer Daten-Endpoint für MAUI Cloud Mode und Dashboard.
 
-**Path parameters:** `tenantId` (GUID)
+**Auth:** Function Key
 
-**Response shape:**
+**Path-Parameter:** `tenantId` (GUID)
+
+**Response 200:** `ResultEnvelope<AppRegistrationSummary[]>`
 ```json
 {
   "success": true,
   "metadata": {
-    "tenantId": "<tenant-id>",
+    "tenantId": "<tenant-guid>",
     "environmentName": "PROD",
     "generatedAt": "2026-05-07T06:00:00.000Z",
     "toolVersion": "0.1.0"
   },
   "data": [
     {
-      "applicationObjectId": "...",
-      "appId": "...",
-      "displayName": "My App",
+      "applicationObjectId": "<object-guid>",
+      "appId": "<app-guid>",
+      "displayName": "My App Registration",
       "secretCount": 2,
       "expiredSecretCount": 0,
       "expiringSecretCount": 1,
       "riskLevel": "High",
       "secrets": [
         {
-          "keyId": "...",
+          "keyId": "<key-guid>",
           "displayName": "prod-key",
           "hint": "abc",
           "endDateTime": "2026-06-15T00:00:00Z",
@@ -458,26 +489,30 @@ the MAUI Cloud Mode and the HTML dashboard.
 }
 ```
 
-**404** — returned when no scan data exists yet or no job is configured for this tenant.
-
-**Note for MAUI:** `LocalCliDataProvider.GetSecretsAsync` returns a **flat** `SecretSummary[]`,
-while this endpoint returns the **nested** `AppRegistrationSummary[]`. The `CloudHttpDataProvider`
-flattens the response automatically before handing it to the Secret List page.
+**Response 404:** Kein Scan für diesen Tenant oder kein Job konfiguriert
 
 ---
 
 ### GET `/api/tenants/{tenantId}/preflight`
 
-**Purpose:** Returns the latest preflight/capability check result. Used by the MAUI Preflight
-Detail page in Cloud Mode to show which Graph permissions are available.
+**Zweck:** Gibt das letzte Preflight-/Capability-Check-Ergebnis zurück. Wird vom MAUI Preflight-Detail-Screen verwendet.
 
-**Response shape:**
+**Auth:** Function Key
+
+**Path-Parameter:** `tenantId` (GUID)
+
+**Response 200:** `ResultEnvelope<PreflightResult>`
 ```json
 {
   "success": true,
-  "metadata": { "tenantId": "...", "environmentName": "PROD", "generatedAt": "...", "toolVersion": "0.1.0" },
+  "metadata": {
+    "tenantId": "<tenant-guid>",
+    "environmentName": "PROD",
+    "generatedAt": "2026-05-07T06:00:00.000Z",
+    "toolVersion": "0.1.0"
+  },
   "data": {
-    "tenantId": "...",
+    "tenantId": "<tenant-guid>",
     "environmentName": "PROD",
     "authValid": true,
     "graphReachable": true,
@@ -488,13 +523,11 @@ Detail page in Cloud Mode to show which Graph permissions are available.
       "canReadServicePrincipals": true,
       "canReadOwners": true,
       "canReadDirectory": false,
-      "canQueryLogAnalytics": true,
-      "canAnalyzeServicePrincipalSignIns": true,
+      "canQueryLogAnalytics": false,
+      "canAnalyzeServicePrincipalSignIns": false,
       "canCreateApplicationSecrets": false,
       "canDeleteApplicationSecrets": false,
-      "canCreateApplications": false,
-      "canReadAzureResources": false,
-      "canReadKeyVaultMetadata": false
+      "canCreateApplications": false
     },
     "missingPermissions": [],
     "warnings": [],
@@ -505,19 +538,21 @@ Detail page in Cloud Mode to show which Graph permissions are available.
 }
 ```
 
-**404** — returned when no preflight data exists yet.
+**Response 404:** Kein Preflight-Ergebnis vorhanden — Scan zuerst ausführen
 
 ---
 
 ### POST `/api/tenants/{tenantId}/scan`
 
-**Purpose:** Triggers an immediate scan for a tenant outside the regular schedule.
-All configured jobs for this tenant are executed. Teams notifications are sent per job config —
-identical behaviour to the scheduled timer trigger.
+**Zweck:** Löst einen sofortigen Scan außerhalb des regulären Zeitplans aus. Alle konfigurierten Jobs für diesen Tenant werden ausgeführt. Teams-Benachrichtigungen werden gemäß Job-Konfiguration gesendet — identisches Verhalten wie der Timer-Trigger.
 
-The scan runs **asynchronously** — the endpoint returns immediately with `202 Accepted`.
+Der Scan läuft **asynchron** — der Endpoint gibt sofort `202 Accepted` zurück.
 
-**Response (202 Accepted):**
+**Auth:** Function Key
+
+**Path-Parameter:** `tenantId` (GUID)
+
+**Response 202:**
 ```json
 {
   "accepted": true,
@@ -526,129 +561,181 @@ The scan runs **asynchronously** — the endpoint returns immediately with `202 
 }
 ```
 
-**404** — returned when no job is configured for this `tenantId` in `jobs.json`.
+**Response 404:** Kein Job für diesen Tenant konfiguriert
 
-After the scan completes, results are available at the `/secrets` and `/preflight` endpoints.
-
----
-
-### POST `/api/tenants`
-
-**Purpose:** Adds a new tenant/job. Stores the scanning credential in Key Vault.
-Returns the created tenant profile.
-
-**Request body (JSON):**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `tenantId` | string | yes | Azure AD tenant GUID |
-| `tenantDisplayName` | string | yes | Display name for notifications and MAUI |
-| `authMode` | string | yes | `client-secret` or `workload-identity-federation` |
-| `clientId` | string | cond. | Required for `client-secret` |
-| `credentialValue` | string | cond. | Client secret value — stored in KV, never persisted |
-| `environmentName` | string | no | Defaults to `default` |
-| `schedule.intervalDays` | number | no | Default: `1` |
-| `schedule.runAtUtc` | string | no | Default: `06:00` |
-| `teamsWebhooks.*` | string | no | Optional per-channel webhook URLs |
-| `notificationThresholds.*` | number | no | Default: expiring=30, critical=7 |
-| `logAnalytics.workspaceId` | string | no | For usage analysis |
-
-**Response: 201 Created** with the TenantProfile.
-
----
-
-### PUT `/api/tenants/{tenantId}`
-
-**Purpose:** Updates an existing tenant's job configuration. If `credentialValue` is provided,
-the Key Vault secret is rotated. Omit `credentialValue` to keep the existing credential.
-
-**Response: 200 OK** with the updated TenantProfile.
-
----
-
-### DELETE `/api/tenants/{tenantId}`
-
-**Purpose:** Removes the tenant's job from `jobs.json`, deletes and purges the Key Vault secret,
-and preserves the runtime state blob for audit.
-
-**Response: 204 No Content**.
+Ergebnisse sind nach Abschluss des Scans unter `/secrets` und `/preflight` abrufbar.
 
 ---
 
 ### GET `/api/dashboard`
 
-**Purpose:** Serves a self-contained interactive HTML page. The page loads data from the
-JSON endpoints client-side via `fetch()`.
+**Zweck:** Liefert eine interaktive HTML-Seite. Die Seite lädt Daten client-seitig via `fetch()` aus den JSON-Endpoints.
 
-**Auth:** `anonymous` — the Function Key is stored in browser `localStorage` under
-the key `aarm_fn_key`. On first load, the browser prompts for the key.
+**Auth:** `anonymous` — der Function Key wird im Browser-`localStorage` unter `aarm_fn_key` gespeichert. Beim ersten Aufruf erscheint ein Browser-Prompt.
 
-**Query parameters (optional):**
-| Param | Description |
+**Query-Parameter (optional):**
+
+| Parameter | Beschreibung |
 |---|---|
-| `tenant` | Pre-selects a tenant ID on load |
-| `env` | Pre-selects an environment name on load |
+| `tenant` | Wählt beim Laden einen Tenant vor (GUID) |
 
-**Use cases:**
-- Bookmark in a browser for a quick status check
-- Link in documentation or a SharePoint page
-- Monitoring screen / wall dashboard
+**Response 200:** HTML-Seite (`text/html`)
+
+Verwendung:
+- Im Browser bookmarken für schnellen Überblick
+- In Dokumentation oder SharePoint verlinken
+- `AARM_DASHBOARD_URL` in App Settings wird in Teams-Notifications verlinkt
 
 ---
 
 ### GET `/api/report`
 
-**Purpose:** Returns a fully server-side rendered HTML snapshot with no JavaScript.
-All data is embedded in the HTML at request time.
+**Zweck:** Liefert einen vollständig server-seitig gerenderten HTML-Snapshot ohne JavaScript. Alle Daten sind zum Anfragezeitpunkt eingebettet.
 
-**Auth:** Function Key required.
+**Auth:** Function Key
 
-**Query parameters (required):**
-| Param | Description |
+**Query-Parameter (Pflicht):**
+
+| Parameter | Beschreibung |
 |---|---|
-| `tenant` | Target tenant ID |
-| `env` | Environment name |
+| `tenant` | Zieltenant-ID (GUID) |
+| `env` | Environment-Name (z. B. `PROD`) |
 
-**Example:**
+Beispiel:
 ```
-GET /api/report?tenant=<tenant-id>&env=PROD
+GET /api/report?tenant=<tenant-guid>&env=PROD
 x-functions-key: <key>
 ```
 
-**Use cases:**
-- Email attachments (paste the HTML into an email body)
-- Archiving point-in-time reports
-- Embedding in services that can't execute JavaScript (e.g. some SharePoint web parts)
-- Automated report generation in CI pipelines
+**Response 200:** HTML-Snapshot (`text/html`)
+
+**Response 400:** `tenant` oder `env` fehlen
+
+**Response 404:** Keine Scan-Daten für diesen Tenant/Environment
+
+Verwendung:
+- E-Mail-Anhänge (HTML in E-Mail-Body einfügen)
+- Archivierung von Punkt-zu-Punkt-Berichten
+- Automatisierte Reportgenerierung in CI-Pipelines
 
 ---
 
-## Local Development
+## 7. Timer-Trigger
 
-1. Install [Azure Functions Core Tools v4](https://docs.microsoft.com/azure/azure-functions/functions-run-local) globally.
-2. Install [Azurite](https://docs.microsoft.com/azure/storage/common/storage-use-azurite) for local storage emulation.
-3. Copy `local.settings.json.template` to `local.settings.json` and fill in the values.
-4. Build and start:
+### `aarmScheduleTrigger`
 
-```bash
-npm install
-npm run build
+**Schedule:** `0 */5 * * * *` — läuft alle 5 Minuten
+
+Bei jedem Tick prüft der Trigger für alle konfigurierten Jobs ob ein Scan fällig ist (basierend auf `intervalDays` und `runAtUtc` in `jobs.json`). Qualifizierende Jobs werden parallel ausgeführt.
+
+**Ablauf pro Job:**
+1. Preflight-Check ausführen (Graph-Permissions, Auth)
+2. App-Registrierungen und Secrets lesen
+3. Ergebnisse in `aarm-data/` in Blob Storage speichern
+4. Runtime-State aktualisieren (`lastRunAt`, `lastRunStatus`)
+5. Teams-Benachrichtigungen senden (gemäß Webhook-Konfiguration und Schwellenwerten)
+
+---
+
+## 8. Testen
+
+### Postman
+
+Für manuelle und explorative Tests stehen zwei Dateien bereit:
+
+| Datei | Zweck |
+|---|---|
+| `references/examples/aarm.postman_collection.json` | Collection mit allen 10 Endpoints und Test-Scripts |
+| `references/examples/aarm-dev.postman_environment.json` | Environment-Template (Dev) |
+
+Import-Reihenfolge in Postman:
+1. Collection importieren (`aarm.postman_collection.json`)
+2. Environment importieren (`aarm-dev.postman_environment.json`)
+3. Environment oben rechts auswählen
+4. `functionKey` und `tenantId` im Environment eintragen
+
+Function Key ermitteln:
+```powershell
+az functionapp keys list --name aarm-dev-fn --resource-group aarm-dev-rg --query "functionKeys.default" -o tsv
+```
+
+`GET /api/tenants` schreibt die erste `tenantId` aus der Liste automatisch in die Collection-Variable — danach funktionieren alle `{tenantId}`-Endpoints ohne manuellen Eintrag.
+
+---
+
+### E2E-Test-Suite
+
+Vollständiger automatisierter End-to-End-Test: legt einen Tenant an, löst einen Scan aus, wartet auf das Ergebnis, verifiziert alle Felder und räumt anschließend auf. Kein externes Test-Framework — nur Node.js 20.
+
+```powershell
+cd tests\e2e
+
+# Einmalig: Konfiguration anlegen
+Copy-Item .env.template .env
+notepad .env   # Function URL, Key, Tenant-Daten eintragen
+
+# Tests ausführen
+npm test
+
+# Mit HTTP-Ausgabe (Debugging)
+npm run test:verbose
+```
+
+Mindestvoraussetzungen in `.env`:
+
+| Variable | Beschreibung |
+|---|---|
+| `AARM_BASE_URL` | `https://aarm-dev-fn.azurewebsites.net` |
+| `AARM_FUNCTION_KEY` | Default Function Key |
+| `AARM_TEST_TENANT_ID` | GUID des Zieltenants |
+| `AARM_TEST_CLIENT_ID` | Client-ID der App Registration |
+| `AARM_TEST_CLIENT_SECRET` | Client Secret (wird über API in Key Vault gespeichert) |
+
+Die App Registration im Zieltenant braucht `Application.Read.All` mit erteiltem Admin Consent.
+
+Vollständige Dokumentation: [`tests/e2e/README.md`](../../../tests/e2e/README.md)
+
+---
+
+## 9. Local Development
+
+### Voraussetzungen
+
+- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
+- [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) für lokale Storage-Emulation
+
+### Setup
+
+```powershell
+# 1. Im Repo-Root: Core-Package und Bundle bauen
+npm run build --workspace packages/core
+cd apps\azure-function
+node esbuild.mjs
+
+# 2. Local Settings einrichten
+Copy-Item local.settings.json.template local.settings.json
+# Werte in local.settings.json eintragen
+
+# 3. Lokal starten (aus apps/azure-function/)
 func start
 ```
 
-The timer trigger fires every 5 minutes. To test locally, temporarily change the CRON
-expression in `src/triggers/timerTrigger.ts` to `*/30 * * * * *` (every 30 seconds).
+Der Timer-Trigger feuert alle 5 Minuten. Zum lokalen Testen die CRON-Expression in `src/triggers/timerTrigger.ts` temporär auf `*/30 * * * * *` (alle 30 Sekunden) ändern und neu bündeln.
 
----
+### Local Settings Template
 
-## Deployment
-
-```bash
-# Build
-npm run build
-
-# Deploy via Azure CLI
-func azure functionapp publish <function-app-name> --node
+```json
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "AARM_STORAGE_URI": "http://127.0.0.1:10000/devstoreaccount1",
+    "AARM_KEYVAULT_URI": "https://aarm-dev-kv.vault.azure.net/",
+    "AARM_DASHBOARD_URL": "http://localhost:7071/api/dashboard",
+    "AZURE_CLIENT_ID": ""
+  }
+}
 ```
 
-Or use GitHub Actions / Azure DevOps with the standard Azure Functions deployment action.
+> **Hinweis:** Lokal wird Azurite für Storage verwendet. Key Vault ist lokal nicht emulierbar — für `client-secret`-Tests wird ein echter Key Vault benötigt oder die Credentials werden direkt in `jobs.json` eingetragen (nur lokal, nie committen).

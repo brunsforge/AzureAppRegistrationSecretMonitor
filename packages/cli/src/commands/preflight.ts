@@ -86,7 +86,6 @@ export function registerPreflightCommand(program: Command): void {
 
         const result = await ctx.preflightService.run({
           tenantId: ctx.tenantId,
-          environmentName: ctx.environmentName,
           authMode: ctx.authMode,
           logAnalyticsWorkspaceId: ctx.logAnalyticsWorkspaceId,
         });
@@ -105,7 +104,7 @@ export function registerPreflightCommand(program: Command): void {
         if (ctx.isJson) {
           process.stdout.write(
             envelopeToJson(
-              createResultEnvelope(result, ctx.tenantId, ctx.environmentName, {
+              createResultEnvelope(result, ctx.tenantId, {
                 warnings: result.warnings,
                 errors: result.errors,
               }),
@@ -144,7 +143,7 @@ export function registerPreflightCommand(program: Command): void {
       }
       if (opts.output === 'json') {
         process.stdout.write(
-          envelopeToJson(createResultEnvelope(cached, tenant.tenantId, tenant.defaultEnvironmentName ?? 'default')) + '\n',
+          envelopeToJson(createResultEnvelope(cached, tenant.tenantId)) + '\n',
         );
       } else {
         process.stderr.write(chalk.dim(`Showing cached result from ${cached.checkedAt}\n\n`));

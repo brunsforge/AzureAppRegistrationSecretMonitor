@@ -12,37 +12,37 @@ export class BlobResultStore {
     this.blobs = new BlobServiceClient(storageUri, credential);
   }
 
-  async saveSecrets(tenantId: string, envName: string, envelope: unknown): Promise<void> {
+  async saveSecrets(tenantId: string, envelope: unknown): Promise<void> {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     await Promise.all([
-      this.upload(`history/${tenantId}/${envName}/secrets-${timestamp}.json`, envelope),
-      this.upload(`latest/${tenantId}/${envName}/secrets.json`, envelope),
+      this.upload(`history/${tenantId}/secrets-${timestamp}.json`, envelope),
+      this.upload(`latest/${tenantId}/secrets.json`, envelope),
     ]);
   }
 
-  async savePreflight(tenantId: string, envName: string, envelope: unknown): Promise<void> {
+  async savePreflight(tenantId: string, envelope: unknown): Promise<void> {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     await Promise.all([
-      this.upload(`history/${tenantId}/${envName}/preflight-${timestamp}.json`, envelope),
-      this.upload(`latest/${tenantId}/${envName}/preflight.json`, envelope),
+      this.upload(`history/${tenantId}/preflight-${timestamp}.json`, envelope),
+      this.upload(`latest/${tenantId}/preflight.json`, envelope),
     ]);
   }
 
-  async getLatestSecrets(tenantId: string, envName: string): Promise<unknown | null> {
-    return this.downloadJson(`latest/${tenantId}/${envName}/secrets.json`);
+  async getLatestSecrets(tenantId: string): Promise<unknown | null> {
+    return this.downloadJson(`latest/${tenantId}/secrets.json`);
   }
 
-  async getLatestPreflight(tenantId: string, envName: string): Promise<unknown | null> {
-    return this.downloadJson(`latest/${tenantId}/${envName}/preflight.json`);
+  async getLatestPreflight(tenantId: string): Promise<unknown | null> {
+    return this.downloadJson(`latest/${tenantId}/preflight.json`);
   }
 
-  /** Returns all {tenantId, envName} pairs that have a latest/secrets.json blob. */
-  async listTenantEnvironments(): Promise<Array<{ tenantId: string; envName: string }>> {
+  /** Returns all tenantIds that have a latest/secrets.json blob. */
+  async listTenants(): Promise<string[]> {
     const container = this.blobs.getContainerClient(DATA_CONTAINER);
-    const results: Array<{ tenantId: string; envName: string }> = [];
+    const results: string[] = [];
     for await (const blob of container.listBlobsFlat({ prefix: 'latest/' })) {
-      const match = blob.name.match(/^latest\/([^/]+)\/([^/]+)\/secrets\.json$/);
-      if (match) results.push({ tenantId: match[1], envName: match[2] });
+      const match = blob.name.match(/^latest\/([^/]+)\/secrets\.json$/);
+      if (match) results.push(match[1]);
     }
     return results;
   }

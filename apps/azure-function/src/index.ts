@@ -3,9 +3,9 @@
 
 import { initializeStorage } from './storage/stores.js';
 
-// Ensure Blob Storage containers exist before any trigger fires.
-// createIfNotExists is idempotent — safe on every cold start.
-await initializeStorage();
+// Initialize storage containers in the background.
+// Must not block module evaluation — a startup failure must not prevent function registration.
+initializeStorage().catch((err) => console.error('[aarm] Storage init failed:', err));
 
 import './triggers/timerTrigger.js';
 import './http/statusHandler.js';

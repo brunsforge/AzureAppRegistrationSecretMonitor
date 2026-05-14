@@ -26,7 +26,6 @@ export async function executeJob(job: JobConfig): Promise<JobScanResult> {
   const [preflightResult, inventory] = await Promise.all([
     new PreflightService(graphClient, credential).run({
       tenantId: job.tenantId,
-      environmentName: job.environmentName,
       authMode: job.authMode as 'client-secret',
       logAnalyticsWorkspaceId: job.logAnalytics?.workspaceId ?? undefined,
     }),
@@ -36,8 +35,8 @@ export async function executeJob(job: JobConfig): Promise<JobScanResult> {
   ]);
 
   return {
-    secretsEnvelope: createResultEnvelope(inventory, job.tenantId, job.environmentName),
-    preflightEnvelope: createResultEnvelope(preflightResult, job.tenantId, job.environmentName, {
+    secretsEnvelope: createResultEnvelope(inventory, job.tenantId),
+    preflightEnvelope: createResultEnvelope(preflightResult, job.tenantId, {
       errors: preflightResult.errors,
       warnings: preflightResult.warnings,
     }),

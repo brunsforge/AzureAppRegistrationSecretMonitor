@@ -1,0 +1,331 @@
+{
+  "info": {
+    "name": "AARM Azure Function",
+    "description": "Azure App Registration Monitor — alle HTTP-Endpoints.\n\nImport-Reihenfolge:\n1. Diese Collection importieren\n2. `aarm-dev.postman_environment.json` als Environment importieren\n3. Environment oben rechts auswählen\n4. `functionKey` und `tenantId` im Environment eintragen\n\nVariablen (werden vom Environment befüllt):\n- `baseUrl`     z.B. https://aarm-dev-fn.azurewebsites.net\n- `functionKey` az functionapp keys list ... --query \"functionKeys.default\" -o tsv\n- `tenantId`    GUID eines konfigurierten Zieltenants (wird von GET /api/tenants automatisch gesetzt)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Discovery",
+      "item": [
+        {
+          "name": "GET /api/status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-functions-key", "value": "{{functionKey}}" }],
+            "url": { "raw": "{{baseUrl}}/api/status", "host": ["{{baseUrl}}"], "path": ["api", "status"] }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('healthy = true', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.healthy).to.be.true;",
+                  "  pm.expect(body).to.have.property('version');",
+                  "  pm.expect(body).to.have.property('jobCount');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/tenants",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-functions-key", "value": "{{functionKey}}" }],
+            "url": { "raw": "{{baseUrl}}/api/tenants", "host": ["{{baseUrl}}"], "path": ["api", "tenants"] }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is array', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.be.an('array');",
+                  "  if (body.length > 0) {",
+                  "    pm.expect(body[0]).to.have.property('tenantId');",
+                  "    pm.expect(body[0]).to.have.property('displayName');",
+                  "    pm.expect(body[0]).to.have.property('authMode');",
+                  "    // Store first tenantId for subsequent requests",
+                  "    pm.collectionVariables.set('tenantId', body[0].tenantId);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tenant CRUD",
+      "item": [
+        {
+          "name": "POST /api/tenants — Add Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-functions-key", "value": "{{functionKey}}" },
+              { "key": "Content-Type",    "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"<target-tenant-guid>\",\n  \"tenantDisplayName\": \"Contoso Corporation\",\n  \"authMode\": \"client-secret\",\n  \"clientId\": \"<app-registration-client-guid>\",\n  \"credentialValue\": \"<client-secret-value>\",\n  \"environmentName\": \"PROD\",\n  \"schedule\": {\n    \"intervalDays\": 1,\n    \"runAtUtc\": \"06:00\"\n  },\n  \"notificationThresholds\": {\n    \"expiringWithinDays\": 30,\n    \"criticalWithinDays\": 7\n  },\n  \"teamsWebhooks\": {\n    \"status\": null,\n    \"alerts\": null,\n    \"errors\": null\n  },\n  \"logAnalytics\": {\n    \"workspaceId\": null,\n    \"enabled\": false\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/tenants", "host": ["{{baseUrl}}"], "path": ["api", "tenants"] }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Returns tenant profile', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('tenantId');",
+                  "  pm.expect(body).to.have.property('authMode');",
+                  "  pm.collectionVariables.set('tenantId', body.tenantId);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT /api/tenants/{tenantId} — Update Tenant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "x-functions-key", "value": "{{functionKey}}" },
+              { "key": "Content-Type",    "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantId\": \"{{tenantId}}\",\n  \"tenantDisplayName\": \"Contoso Corporation (updated)\",\n  \"authMode\": \"client-secret\",\n  \"clientId\": \"<app-registration-client-guid>\",\n  \"schedule\": {\n    \"intervalDays\": 7,\n    \"runAtUtc\": \"08:00\"\n  },\n  \"notificationThresholds\": {\n    \"expiringWithinDays\": 14,\n    \"criticalWithinDays\": 3\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}",
+              "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns updated profile', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('tenantId');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /api/tenants/{tenantId}",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "x-functions-key", "value": "{{functionKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}",
+              "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scan Data",
+      "item": [
+        {
+          "name": "GET /api/tenants/{tenantId}/secrets",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-functions-key", "value": "{{functionKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/secrets",
+              "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "secrets"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 or 404', () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('ResultEnvelope structure', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property('success');",
+                  "    pm.expect(body).to.have.property('metadata');",
+                  "    pm.expect(body).to.have.property('data');",
+                  "    pm.expect(body.data).to.be.an('array');",
+                  "    pm.expect(body.metadata).to.have.property('tenantId');",
+                  "    pm.expect(body.metadata).to.have.property('generatedAt');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/tenants/{tenantId}/preflight",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-functions-key", "value": "{{functionKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/preflight",
+              "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "preflight"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 or 404', () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('PreflightResult structure', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.data).to.have.property('authValid');",
+                  "    pm.expect(body.data).to.have.property('graphReachable');",
+                  "    pm.expect(body.data).to.have.property('capabilities');",
+                  "    pm.expect(body.data.capabilities).to.have.property('canReadApplications');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/tenants/{tenantId}/scan — Trigger Scan",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-functions-key", "value": "{{functionKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/tenants/{{tenantId}}/scan",
+              "host": ["{{baseUrl}}"], "path": ["api", "tenants", "{{tenantId}}", "scan"]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 202 Accepted', () => pm.response.to.have.status(202));",
+                  "pm.test('Accepted response body', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.accepted).to.be.true;",
+                  "  pm.expect(body).to.have.property('startedAt');",
+                  "  pm.expect(body).to.have.property('jobCount');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "UI",
+      "item": [
+        {
+          "name": "GET /api/dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard?tenant={{tenantId}}",
+              "host": ["{{baseUrl}}"], "path": ["api", "dashboard"],
+              "query": [{ "key": "tenant", "value": "{{tenantId}}" }]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content-Type HTML', () => {",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                  "});",
+                  "pm.test('Contains dashboard title', () => {",
+                  "  pm.expect(pm.response.text()).to.include('Azure App Registration Monitor');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-functions-key", "value": "{{functionKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/report?tenant={{tenantId}}",
+              "host": ["{{baseUrl}}"], "path": ["api", "report"],
+              "query": [
+                { "key": "tenant", "value": "{{tenantId}}" }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 or 404', () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('Content-Type HTML', () => {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html');",
+                  "  });",
+                  "  pm.test('Contains report title', () => {",
+                  "    pm.expect(pm.response.text()).to.include('App Registration Secret Report');",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

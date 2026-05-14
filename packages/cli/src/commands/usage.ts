@@ -129,7 +129,7 @@ export function registerUsageCommand(program: Command): void {
 
         if (ctx.isJson) {
           process.stdout.write(
-            envelopeToJson(createResultEnvelope(result, ctx.tenantId, ctx.environmentName)) + '\n',
+            envelopeToJson(createResultEnvelope(result, ctx.tenantId)) + '\n',
           );
         } else {
           printAppUsage(result);
@@ -155,7 +155,7 @@ export function registerUsageCommand(program: Command): void {
 
         if (ctx.isJson) {
           process.stdout.write(
-            envelopeToJson(createResultEnvelope(result, ctx.tenantId, ctx.environmentName)) + '\n',
+            envelopeToJson(createResultEnvelope(result, ctx.tenantId)) + '\n',
           );
         } else {
           printSecretUsage(result, `Usage — Key ID: ${chalk.bold(cmdOpts.keyId)}`);
@@ -191,7 +191,7 @@ export function registerUsageCommand(program: Command): void {
 
         if (ctx.isJson) {
           process.stdout.write(
-            envelopeToJson(createResultEnvelope(summary, ctx.tenantId, ctx.environmentName)) + '\n',
+            envelopeToJson(createResultEnvelope(summary, ctx.tenantId)) + '\n',
           );
         } else {
           process.stdout.write(`App ID   : ${result.appId}\n`);
@@ -226,7 +226,7 @@ export function registerUsageCommand(program: Command): void {
 
         if (ctx.isJson) {
           process.stdout.write(
-            envelopeToJson(createResultEnvelope(result, ctx.tenantId, ctx.environmentName)) + '\n',
+            envelopeToJson(createResultEnvelope(result, ctx.tenantId)) + '\n',
           );
         } else {
           const label = `Rotation Check — App: ${chalk.bold(cmdOpts.appId)}  Old Key: ${chalk.bold(cmdOpts.oldKeyId)}`;

@@ -71,6 +71,7 @@ _pkginfo.txt
 .env
 .env.*
 *.env
+!*.env.template
 *.secret
 *.secret.*
 
@@ -132,6 +133,10 @@ ehthumbs.db
 
 # JetBrains (covered above for Rider but also PyCharm, IDEA etc.)
 *.iml
+
+# ────────────────────────────────────────────────────────────────────────────
+# Azure Function deployment staging directory — generated, never commit
+apps/azure-function/_deploy/
 
 # ────────────────────────────────────────────────────────────────────────────
 # What IS committed (overrides above where needed)

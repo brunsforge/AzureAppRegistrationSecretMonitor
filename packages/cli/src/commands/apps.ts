@@ -24,11 +24,7 @@ export function registerAppsCommand(program: Command): void {
         });
 
         if (ctx.isJson) {
-          const envelope = createResultEnvelope(
-            inventory,
-            ctx.tenantId,
-            ctx.environmentName,
-          );
+          const envelope = createResultEnvelope(inventory, ctx.tenantId);
           process.stdout.write(envelopeToJson(envelope) + '\n');
         } else {
           printAppsTable(inventory);

@@ -3,7 +3,6 @@ import type { AuthMode } from '../auth/AuthMode.js';
 export interface TenantProfile {
   tenantId: string;
   displayName: string;
-  defaultEnvironmentName?: string;
   authMode: AuthMode;
   /** App Registration (client ID) used for authentication. Not required for azure-cli mode. */
   clientId?: string;

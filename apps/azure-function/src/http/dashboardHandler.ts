@@ -54,6 +54,7 @@ function buildDashboardHtml(initialTenant: string): string {
 <div class="controls">
   <select id="tenantSel"></select>
   <button onclick="load()">Refresh</button>
+  <button onclick="changeKey()" title="Function Key ändern">🔑 Key ändern</button>
 </div>
 <div id="status">Loading…</div>
 <div class="cards" id="cards"></div>
@@ -69,7 +70,9 @@ async function init() {
   const key = getKey();
   if (!key) { setStatus('Enter your function key to continue.'); return; }
   const r = await fetch(BASE+'/api/tenants', {headers:{'x-functions-key':key}}).catch(()=>null);
-  if(!r||!r.ok){setStatus('Could not load tenants — check function key');return;}
+  if(!r){setStatus('Verbindungsfehler.');return;}
+  if(r.status===401||r.status===403){localStorage.removeItem('aarm_fn_key');setStatus('Key ungültig — bitte neu eingeben.');setTimeout(init,500);return;}
+  if(!r.ok){setStatus('Fehler beim Laden der Tenants ('+r.status+').');return;}
   const tenants = await r.json();
   const sel = document.getElementById('tenantSel');
   sel.innerHTML = tenants.map(t=>'<option value="'+esc(t.tenantId)+'">'+esc(t.displayName||t.tenantId)+'</option>').join('');
@@ -114,8 +117,14 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 function setStatus(t){document.getElementById('status').textContent=t;}
 function getKey(){
   let k=localStorage.getItem('aarm_fn_key');
-  if(!k){k=prompt('Paste your Azure Function key:');if(k)localStorage.setItem('aarm_fn_key',k);}
+  if(!k){k=prompt('Function Key eingeben:');if(k)localStorage.setItem('aarm_fn_key',k);}
   return k||'';
+}
+function changeKey(){
+  localStorage.removeItem('aarm_fn_key');
+  const k=prompt('Neuen Function Key eingeben:');
+  if(k){localStorage.setItem('aarm_fn_key',k);init();}
+  else{setStatus('Kein Key eingegeben.');}
 }
 
 init();

@@ -5,7 +5,6 @@ export interface JobConfig {
   enabled: boolean;
   tenantId: string;
   tenantDisplayName: string;
-  environmentName: string;
   authMode: JobAuthMode;
   clientId: string;
   /** Key Vault secret name (e.g. aarm-contoso-prod). Omit for workload-identity-federation. */

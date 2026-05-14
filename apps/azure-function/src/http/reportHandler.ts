@@ -12,28 +12,26 @@ app.http('report', {
 
 async function reportHandler(req: HttpRequest): Promise<HttpResponseInit> {
   const tenantId = req.query.get('tenant') ?? '';
-  const envName = req.query.get('env') ?? '';
 
-  if (!tenantId || !envName) {
-    return { status: 400, body: 'Query params tenant and env are required' };
+  if (!tenantId) {
+    return { status: 400, body: 'Query param tenant is required' };
   }
 
-  const raw = await getResultStore().getLatestSecrets(tenantId, envName);
+  const raw = await getResultStore().getLatestSecrets(tenantId);
   if (!raw) {
-    return { status: 404, body: `No scan data for ${tenantId} / ${envName}` };
+    return { status: 404, body: `No scan data for ${tenantId}` };
   }
 
   const envelope = raw as { data: AppRegistrationSummary[]; metadata: { generatedAt: string } };
   return {
     status: 200,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
-    body: buildReportHtml(tenantId, envName, envelope.data, envelope.metadata.generatedAt),
+    body: buildReportHtml(tenantId, envelope.data, envelope.metadata.generatedAt),
   };
 }
 
 function buildReportHtml(
   tenantId: string,
-  envName: string,
   apps: AppRegistrationSummary[],
   generatedAt: string,
 ): string {
@@ -77,7 +75,7 @@ function buildReportHtml(
 </head>
 <body>
 <h1>App Registration Secret Report</h1>
-<div class="meta">Tenant: ${esc(tenantId)} &nbsp;|&nbsp; Environment: ${esc(envName)} &nbsp;|&nbsp; Generated: ${esc(generatedAt)}</div>
+<div class="meta">Tenant: ${esc(tenantId)} &nbsp;|&nbsp; Generated: ${esc(generatedAt)}</div>
 <div class="summary">
   <div><div class="stat">${secrets.length}</div><div class="slabel">Total Secrets</div></div>
   <div class="critical"><div class="stat">${critical}</div><div class="slabel">Critical</div></div>

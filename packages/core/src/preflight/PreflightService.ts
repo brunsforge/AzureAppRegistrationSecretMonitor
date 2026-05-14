@@ -21,7 +21,6 @@ export interface CapabilitySet {
 
 export interface PreflightResult {
   tenantId: string;
-  environmentName: string;
   authValid: boolean;
   graphReachable: boolean;
   checkedAt: string;
@@ -33,7 +32,6 @@ export interface PreflightResult {
 
 export interface PreflightParams {
   tenantId: string;
-  environmentName: string;
   authMode: AuthMode;
   logAnalyticsWorkspaceId?: string;
 }
@@ -111,7 +109,6 @@ export class PreflightService {
 
     return {
       tenantId: params.tenantId,
-      environmentName: params.environmentName,
       authValid,
       graphReachable,
       checkedAt,
@@ -130,7 +127,6 @@ export class PreflightService {
   ): PreflightResult {
     return {
       tenantId: params.tenantId,
-      environmentName: params.environmentName,
       authValid,
       graphReachable: false,
       checkedAt,

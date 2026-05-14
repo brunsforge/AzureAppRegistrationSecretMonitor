@@ -9,7 +9,6 @@ import type { JobConfig } from '../types/JobConfig.js';
 interface TenantUpsertBody {
   tenantId:            string;
   tenantDisplayName:   string;
-  environmentName?:    string;
   authMode:            string;
   clientId?:           string;
   credentialValue?:    string;   // client secret value → stored in KV, never persisted elsewhere
@@ -62,7 +61,7 @@ async function addTenantHandler(req: HttpRequest, context: InvocationContext): P
       return json({ error: `Tenant ${body.tenantId} already configured. Use PUT to update.` }, 409);
     }
 
-    const jobId = slugify(`${body.tenantDisplayName}-${body.environmentName ?? 'default'}`);
+    const jobId = slugify(body.tenantDisplayName);
     let credentialRef: string | undefined;
 
     if (body.authMode === 'client-secret') {
@@ -178,7 +177,6 @@ function buildJobConfig(
     enabled:          true,
     tenantId:         body.tenantId,
     tenantDisplayName: body.tenantDisplayName,
-    environmentName:  body.environmentName ?? 'default',
     authMode:         body.authMode as JobConfig['authMode'],
     clientId:         body.clientId ?? '',
     credentialRef,
@@ -201,7 +199,6 @@ function jobToProfile(job: JobConfig, lastRunAt: string | null) {
     authMode:                job.authMode,
     clientId:                job.clientId,
     username:                null,
-    defaultEnvironmentName:  job.environmentName,
     logAnalyticsWorkspaceId: job.logAnalytics?.workspaceId ?? null,
     createdAt:               now,
     updatedAt:               now,

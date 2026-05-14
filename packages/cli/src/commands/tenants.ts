@@ -72,7 +72,7 @@ export function registerTenantsCommand(program: Command): void {
       const list = await store.listTenants();
 
       if (opts.output === 'json') {
-        process.stdout.write(envelopeToJson(createResultEnvelope(list, 'local', 'config')) + '\n');
+        process.stdout.write(envelopeToJson(createResultEnvelope(list, 'local')) + '\n');
       } else {
         printTenantsTable(list);
       }
@@ -134,7 +134,6 @@ export function registerTenantsCommand(program: Command): void {
         displayName,
         authMode,
         clientId,
-        defaultEnvironmentName: 'default',
         ...(workspaceId ? { logAnalyticsWorkspaceId: workspaceId } : {}),
         createdAt: now,
         updatedAt: now,
@@ -214,7 +213,6 @@ export function registerTenantsCommand(program: Command): void {
 
         const result = await ctx.preflightService.run({
           tenantId: ctx.tenantId,
-          environmentName: ctx.environmentName,
           authMode: ctx.authMode,
         });
 

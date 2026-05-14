@@ -26,7 +26,7 @@ async function tenantsHandler(context: InvocationContext): Promise<HttpResponseI
     // One entry per unique tenantId, using the first matching job.
     const byTenant = new Map<string, {
       displayName: string; authMode: string; clientId: string | null;
-      defaultEnvironmentName: string; logAnalyticsWorkspaceId: string | null;
+      logAnalyticsWorkspaceId: string | null;
     }>();
     for (const job of jobs) {
       if (!byTenant.has(job.tenantId)) {
@@ -34,7 +34,6 @@ async function tenantsHandler(context: InvocationContext): Promise<HttpResponseI
           displayName:             job.tenantDisplayName,
           authMode:                job.authMode,
           clientId:                job.clientId ?? null,
-          defaultEnvironmentName:  job.environmentName,
           logAnalyticsWorkspaceId: job.logAnalytics?.workspaceId ?? null,
         });
       }
@@ -56,7 +55,6 @@ async function tenantsHandler(context: InvocationContext): Promise<HttpResponseI
           authMode:                meta.authMode,
           clientId:                meta.clientId,
           username:                null,
-          defaultEnvironmentName:  meta.defaultEnvironmentName,
           logAnalyticsWorkspaceId: meta.logAnalyticsWorkspaceId,
           createdAt:               now,
           updatedAt:               lastRunAt ?? now,
@@ -87,7 +85,7 @@ async function secretsHandler(req: HttpRequest, context: InvocationContext): Pro
   try {
     const job = await findPrimaryJob(tenantId);
     if (!job) return json({ error: `No job configured for tenant ${tenantId}` }, 404);
-    const data = await getResultStore().getLatestSecrets(tenantId, job.environmentName);
+    const data = await getResultStore().getLatestSecrets(tenantId);
     if (!data) return json({ error: 'No scan data available — run a scan first' }, 404);
     return json(data);
   } catch (err) {
@@ -110,7 +108,7 @@ async function preflightHandler(req: HttpRequest, context: InvocationContext): P
   try {
     const job = await findPrimaryJob(tenantId);
     if (!job) return json({ error: `No job configured for tenant ${tenantId}` }, 404);
-    const data = await getResultStore().getLatestPreflight(tenantId, job.environmentName);
+    const data = await getResultStore().getLatestPreflight(tenantId);
     if (!data) return json({ error: 'No preflight data available — run a scan first' }, 404);
     return json(data);
   } catch (err) {
@@ -150,8 +148,8 @@ async function manualScanHandler(req: HttpRequest, context: InvocationContext): 
         const thresholds = evaluateThresholds(result.secretsEnvelope.data, job);
 
         await Promise.all([
-          resultStore.saveSecrets(job.tenantId, job.environmentName, result.secretsEnvelope),
-          resultStore.savePreflight(job.tenantId, job.environmentName, result.preflightEnvelope),
+          resultStore.saveSecrets(job.tenantId, result.secretsEnvelope),
+          resultStore.savePreflight(job.tenantId, result.preflightEnvelope),
           runtimeStore.write({ jobId: job.id, lastRunAt: started, lastRunStatus: 'success', lastRunSecretsFound: thresholds.secretCount }),
         ]);
 

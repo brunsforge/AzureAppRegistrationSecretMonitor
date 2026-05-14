@@ -39,8 +39,8 @@ async function scheduleTriggerHandler(_timer: Timer, context: InvocationContext)
         const thresholds = evaluateThresholds(result.secretsEnvelope.data, job);
 
         await Promise.all([
-          resultStore.saveSecrets(job.tenantId, job.environmentName, result.secretsEnvelope),
-          resultStore.savePreflight(job.tenantId, job.environmentName, result.preflightEnvelope),
+          resultStore.saveSecrets(job.tenantId, result.secretsEnvelope),
+          resultStore.savePreflight(job.tenantId, result.preflightEnvelope),
           runtimeStore.write({
             jobId: job.id,
             lastRunAt: started,

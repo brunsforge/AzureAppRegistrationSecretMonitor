@@ -27,7 +27,7 @@ export function registerSecretsCommand(program: Command): void {
         const ctx = await buildContext(program.opts());
         const inventory = await ctx.inventoryService.getInventory();
         const flat = allSecrets(inventory);
-        const envelope = createResultEnvelope(flat, ctx.tenantId, ctx.environmentName);
+        const envelope = createResultEnvelope(flat, ctx.tenantId);
 
         // Auto-save history — side effect, failures are swallowed inside HistoryStore
         const history = new HistoryStore(ctx.configStore.getConfigDir());
@@ -71,7 +71,7 @@ export function registerSecretsCommand(program: Command): void {
 
         if (ctx.isJson) {
           process.stdout.write(
-            envelopeToJson(createResultEnvelope(flat, ctx.tenantId, ctx.environmentName)) + '\n',
+            envelopeToJson(createResultEnvelope(flat, ctx.tenantId)) + '\n',
           );
         } else {
           printSecretsTable(flat);
@@ -92,7 +92,7 @@ export function registerSecretsCommand(program: Command): void {
 
         if (ctx.isJson) {
           process.stdout.write(
-            envelopeToJson(createResultEnvelope(flat, ctx.tenantId, ctx.environmentName)) + '\n',
+            envelopeToJson(createResultEnvelope(flat, ctx.tenantId)) + '\n',
           );
         } else {
           printSecretsTable(flat);

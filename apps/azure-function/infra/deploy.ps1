@@ -1,22 +1,43 @@
 #!/usr/bin/env pwsh
-# deploy.ps1 — Build and deploy the AARM Azure Function
+# deploy.ps1 -- Build and deploy the AARM Azure Function
 #
 # Usage:
 #   # Full deploy (infra + code):
-#   .\infra\deploy.ps1 -ResourceGroup aarm-rg
+#   .\infra\deploy.ps1 -ResourceGroup aarm-dev-rg
 #
 #   # Infra only (no code push):
-#   .\infra\deploy.ps1 -ResourceGroup aarm-rg -InfraOnly
+#   .\infra\deploy.ps1 -ResourceGroup aarm-dev-rg -InfraOnly
 #
 #   # Code only (re-deploy after code changes, infra already exists):
-#   .\infra\deploy.ps1 -ResourceGroup aarm-rg -CodeOnly
+#   .\infra\deploy.ps1 -ResourceGroup aarm-dev-rg -CodeOnly
 #
-# Prerequisites: az CLI (logged in), Node.js 20+, npm
+# Prerequisites: az CLI (logged in), azure-functions-core-tools v4, Node.js 20+, npm
+#
+# DEPLOYMENT NOTE
+# ---------------
+# The repository uses npm workspaces. All packages (@azure/functions, Azure SDKs, ...) are
+# hoisted to the root node_modules/, not the local apps/azure-function/node_modules/.
+# func azure functionapp publish only packages the local directory -- without the root
+# node_modules/ all dependencies are missing.
+#
+# Solution: a _deploy/ subdirectory with
+#   - its own package.json (only @azure/functions as dependency, no workspace reference)
+#   - a fresh npm install
+#   - the esbuild bundle (dist/index.js) that embeds all other dependencies
+#
+# Additional esbuild requirements:
+#   - banner: createRequire -- CJS packages bundled into ESM need require() for Node built-ins
+#   - @azure/identity-cache-persistence as external + dynamic import -- Windows/macOS keychain
+#     addon, not available on Linux/Azure; fails gracefully via try/catch
+#   - initializeStorage() called non-blocking (.catch()) -- a top-level await that throws
+#     prevents all function registrations
 
 param(
     [Parameter(Mandatory)][string]$ResourceGroup,
-    [string]$Prefix   = 'aarm',
-    [string]$Location = 'westeurope',
+    [string]$Prefix         = 'aarm',
+    [string]$Environment    = 'dev',
+    [string]$Location       = 'westeurope',
+    [string]$DeploymentName = 'aarm-deploy',
     [switch]$InfraOnly,
     [switch]$CodeOnly
 )
@@ -24,118 +45,115 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$fnDir     = Split-Path -Parent $scriptDir   # apps/azure-function
+$repoRoot  = Resolve-Path (Join-Path $PSScriptRoot '..\..\..') # repo root
+$fnDir     = Join-Path $repoRoot 'apps\azure-function'
+$deployDir = Join-Path $fnDir '_deploy'
+$infraDir  = Join-Path $repoRoot 'infra'
 
-# ── 1. Deploy infrastructure ───────────────────────────────────────────────────
+# == 1. Deploy infrastructure ==================================================
+
 if (-not $CodeOnly) {
-    Write-Host "[1/3] Deploying infrastructure to resource group '$ResourceGroup'…" -ForegroundColor Cyan
+    Write-Host "[1/3] Deploying infrastructure to resource group '$ResourceGroup'..." -ForegroundColor Cyan
 
     $rawOutput = az deployment group create `
         --resource-group $ResourceGroup `
-        --template-file "$scriptDir/main.bicep" `
-        --parameters "prefix=$Prefix" "location=$Location" `
+        --template-file "$infraDir\main.bicep" `
+        --parameters "$infraDir\main.bicepparam" `
+        --name $DeploymentName `
         --output json
 
-    if ($LASTEXITCODE -ne 0) { throw "Infrastructure deployment failed." }
+    if ($LASTEXITCODE -ne 0) { throw 'Infrastructure deployment failed.' }
 
-    $deployment = $rawOutput | ConvertFrom-Json
-    $outputs    = $deployment.properties.outputs
+    $outputs    = ($rawOutput | ConvertFrom-Json).properties.outputs
+    $fnName     = $outputs.functionAppName.value
+    $fnHostname = $outputs.functionAppHostname.value
+    $stName     = $outputs.storageAccountName.value
+    $kvName     = $outputs.keyVaultName.value
 
-    $fnName   = $outputs.functionAppName.value
-    $fnUrl    = $outputs.functionAppUrl.value
-    $kvName   = $outputs.keyVaultName.value
-    $kvUri    = $outputs.keyVaultUri.value
-    $stName   = $outputs.storageAccountName.value
-
-    Write-Host ""
-    Write-Host "Infrastructure deployed:" -ForegroundColor Green
-    Write-Host "  Function App : $fnName"
-    Write-Host "  URL          : $fnUrl"
-    Write-Host "  Storage      : $stName"
-    Write-Host "  Key Vault    : $kvName ($kvUri)"
-    Write-Host ""
+    Write-Host "  Function App  : $fnName"
+    Write-Host "  Hostname      : $fnHostname"
+    Write-Host "  Storage       : $stName"
+    Write-Host "  Key Vault     : $kvName"
 } else {
-    # Resolve function app name from existing deployment
-    $fnName = (az functionapp list `
+    $fnNameRaw = az functionapp list `
         --resource-group $ResourceGroup `
-        --query "[?starts_with(name,'$Prefix-fn')].name | [0]" `
-        -o tsv).Trim()
+        --query "[?starts_with(name,'$Prefix-$Environment-fn')].name | [0]" `
+        -o tsv
+    $fnName = if ($fnNameRaw) { $fnNameRaw.Trim() } else { '' }
 
     if (-not $fnName) {
-        throw "No function app found in '$ResourceGroup' with prefix '$Prefix-fn'. Run without -CodeOnly first."
+        throw "No function app found in '$ResourceGroup' with prefix '$Prefix-$Environment-fn'. Run without -CodeOnly first."
     }
-    Write-Host "[1/3] Skipped (CodeOnly — using existing function app '$fnName')" -ForegroundColor DarkGray
+
+    $fnHostnameRaw = az functionapp show `
+        --resource-group $ResourceGroup `
+        --name $fnName `
+        --query defaultHostName `
+        -o tsv 2>$null
+    $fnHostname = if ($fnHostnameRaw) { $fnHostnameRaw.Trim() } else { "$fnName.azurewebsites.net" }
+
+    Write-Host "[1/3] Skipped (CodeOnly -- using existing function app '$fnName')" -ForegroundColor DarkGray
 }
 
 if ($InfraOnly) {
-    Write-Host "InfraOnly: skipping code build and deployment." -ForegroundColor DarkGray
+    Write-Host 'InfraOnly: skipping code build and deployment.' -ForegroundColor DarkGray
     exit 0
 }
 
-# ── 2. Build ───────────────────────────────────────────────────────────────────
-Write-Host "[2/3] Building function app…" -ForegroundColor Cyan
+# == 2. Build ==================================================================
+
+Write-Host '[2/3] Building function app...' -ForegroundColor Cyan
+
+Write-Host '  Building @brunsforge/azure-app-registration-monitor...'
+npm run build --prefix (Join-Path $repoRoot 'packages\core') 2>&1 | Select-Object -Last 3
+
+Write-Host '  Running esbuild...'
 Push-Location $fnDir
 try {
-    npm ci
-    if ($LASTEXITCODE -ne 0) { throw "npm ci failed." }
-    npm run build
-    if ($LASTEXITCODE -ne 0) { throw "npm run build failed." }
+    node esbuild.mjs
+    if ($LASTEXITCODE -ne 0) { throw 'esbuild failed.' }
 } finally {
     Pop-Location
 }
-Write-Host "  Build OK"
 
-# ── 3. Deploy code (zip deploy + Oryx build on Azure) ─────────────────────────
-Write-Host "[3/3] Deploying code to '$fnName'…" -ForegroundColor Cyan
-
-# Package: compiled output + manifest files (no node_modules — Oryx installs on Azure)
-$zipPath = Join-Path ([System.IO.Path]::GetTempPath()) "aarm-fn-$(Get-Date -Format 'yyyyMMdd-HHmmss').zip"
-
-$items = @(
-    "$fnDir\dist"
-    "$fnDir\host.json"
-    "$fnDir\package.json"
-    "$fnDir\package-lock.json"
-)
-
-# Compress-Archive doesn't handle directories well; use 7zip or dotnet zip
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zip = [System.IO.Compression.ZipFile]::Open($zipPath, 'Create')
-try {
-    foreach ($item in $items) {
-        if (Test-Path $item -PathType Container) {
-            Get-ChildItem $item -Recurse -File | ForEach-Object {
-                $entryName = $_.FullName.Substring($fnDir.Length + 1).Replace('\', '/')
-                [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $entryName)
-            }
-        } elseif (Test-Path $item -PathType Leaf) {
-            $entryName = (Split-Path $item -Leaf)
-            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $item, $entryName)
-        }
-    }
-} finally {
-    $zip.Dispose()
+if (-not (Test-Path "$deployDir\node_modules\cookie")) {
+    Write-Host '  Setting up _deploy/node_modules (@azure/functions + dependencies)...'
+    npm install --prefix $deployDir --omit=dev 2>&1 | Select-Object -Last 2
 }
 
-Write-Host "  Package: $zipPath ($([math]::Round((Get-Item $zipPath).Length / 1MB, 1)) MB)"
+Copy-Item "$fnDir\dist\index.js" "$deployDir\dist\index.js" -Force
+$bundleKB = [math]::Round((Get-Item "$deployDir\dist\index.js").Length / 1KB)
+Write-Host "  Bundle: $bundleKB KB"
 
-az functionapp deployment source config-zip `
+# == 3. Deploy code ============================================================
+
+Write-Host "[3/3] Deploying code to '$fnName'..." -ForegroundColor Cyan
+
+Push-Location $deployDir
+try {
+    func azure functionapp publish $fnName --typescript
+    if ($LASTEXITCODE -ne 0) { throw 'Code deployment failed.' }
+} finally {
+    Pop-Location
+}
+
+# == Summary ===================================================================
+
+$fnKey = (az functionapp keys list `
     --resource-group $ResourceGroup `
     --name $fnName `
-    --src $zipPath `
-    --output none
+    --query 'functionKeys.default' -o tsv 2>$null).Trim()
 
-if ($LASTEXITCODE -ne 0) { throw "Code deployment failed." }
-
-Remove-Item $zipPath
-
-Write-Host ""
-Write-Host "Deployment complete." -ForegroundColor Green
-Write-Host "Dashboard : https://$fnName.azurewebsites.net/api/dashboard"
-Write-Host "Status    : https://$fnName.azurewebsites.net/api/status?code=<function-key>"
-Write-Host ""
-Write-Host "Next steps:"
-Write-Host "  1. Get the function key: az functionapp keys list -g $ResourceGroup -n $fnName --query 'functionKeys.default' -o tsv"
-Write-Host "  2. In MAUI Settings: set Function base URI to https://$fnName.azurewebsites.net and paste the key."
-Write-Host "  3. Add your first tenant via the MAUI Tenants page (Cloud Mode)."
+Write-Host ''
+Write-Host 'Deployment complete.' -ForegroundColor Green
+Write-Host ''
+Write-Host "Function App  : https://$fnHostname"
+Write-Host "Dashboard     : https://$fnHostname/api/dashboard"
+Write-Host "Status        : https://$fnHostname/api/status"
+if ($fnKey) {
+    Write-Host "Function Key  : $fnKey"
+}
+Write-Host ''
+Write-Host 'Next steps:'
+Write-Host '  Add your first tenant/scan job:'
+Write-Host "  .\infra\setup-tenant.ps1 -ResourceGroup $ResourceGroup -DeploymentName $DeploymentName"

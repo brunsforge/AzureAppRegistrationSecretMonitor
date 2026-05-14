@@ -1,0 +1,14 @@
+{
+  "name": "@brunsforge/aarm-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-End tests for the AARM Azure Function API",
+  "scripts": {
+    "test": "node --env-file=.env e2e.mjs",
+    "test:verbose": "AARM_VERBOSE=1 node --env-file=.env e2e.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

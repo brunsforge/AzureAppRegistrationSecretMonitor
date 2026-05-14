@@ -36,7 +36,6 @@ function outputSecrets(
   secrets: SecretSummary[],
   output: string,
   tenantId: string,
-  envName: string,
 ): void {
   if (secrets.length === 0) {
     process.stdout.write(chalk.dim('No matching secrets found.\n'));
@@ -45,11 +44,11 @@ function outputSecrets(
   switch (output) {
     case 'json':
       process.stdout.write(
-        envelopeToJson(createResultEnvelope(secrets, tenantId, envName)) + '\n',
+        envelopeToJson(createResultEnvelope(secrets, tenantId)) + '\n',
       );
       break;
     case 'markdown':
-      process.stdout.write(secretsToMarkdown(secrets, tenantId, envName));
+      process.stdout.write(secretsToMarkdown(secrets, tenantId));
       break;
     case 'csv':
       process.stdout.write(secretsToCsv(secrets));
@@ -84,7 +83,7 @@ export function registerReportCommand(program: Command): void {
           (s) => s.status === 'ExpiringSoon' || s.status === 'Expired',
         );
 
-        outputSecrets(expiring, program.opts().output, ctx.tenantId, ctx.environmentName);
+        outputSecrets(expiring, program.opts().output, ctx.tenantId);
       } catch (err) {
         handleError(err);
       }
@@ -101,7 +100,6 @@ export function registerReportCommand(program: Command): void {
 
         const summary = {
           tenantId: ctx.tenantId,
-          environmentName: ctx.environmentName,
           generatedAt: new Date().toISOString(),
           appCount: inventory.length,
           secretCount: allSec.length,
@@ -119,7 +117,7 @@ export function registerReportCommand(program: Command): void {
 
         if (ctx.isJson) {
           process.stdout.write(
-            envelopeToJson(createResultEnvelope(summary, ctx.tenantId, ctx.environmentName)) + '\n',
+            envelopeToJson(createResultEnvelope(summary, ctx.tenantId)) + '\n',
           );
         } else {
           process.stdout.write(`\nTenant Summary — ${chalk.bold(ctx.tenantId)}\n`);
@@ -155,7 +153,7 @@ export function registerReportCommand(program: Command): void {
           (s) => riskLevelOrder(s.riskLevel) >= thresholdOrder,
         );
 
-        outputSecrets(findings, program.opts().output, ctx.tenantId, ctx.environmentName);
+        outputSecrets(findings, program.opts().output, ctx.tenantId);
       } catch (err) {
         handleError(err);
       }
@@ -202,7 +200,6 @@ export function registerReportCommand(program: Command): void {
               createResultEnvelope(
                 { appId: cmdOpts.appId, keyId: cmdOpts.keyId, guide },
                 ctx.tenantId,
-                ctx.environmentName,
               ),
             ) + '\n',
           );
