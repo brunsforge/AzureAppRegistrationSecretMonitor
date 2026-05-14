@@ -1,6 +1,6 @@
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
+// require is provided globally by the esbuild createRequire banner in esbuild.mjs
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const require: (module: string) => any;
 
 interface EmailClient {
   beginSend(message: EmailMessage): Promise<Poller>;
@@ -18,7 +18,6 @@ let EmailClientClass: new (connectionString: string) => EmailClient;
 
 function lazyLoad(): void {
   if (!EmailClientClass) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     EmailClientClass = require('@azure/communication-email').EmailClient;
   }
 }
@@ -34,7 +33,7 @@ export async function sendMail(
 ): Promise<void> {
   const connStr = process.env['AARM_ACS_CONNECTION_STRING'];
   const sender  = process.env['AARM_ACS_SENDER_EMAIL'];
-  if (!connStr || !sender) throw new Error('ACS not configured (AARM_ACS_CONNECTION_STRING or AARM_ACS_SENDER_EMAIL missing)');
+  if (!connStr || !sender) throw new Error('ACS not configured');
 
   lazyLoad();
   const client = new EmailClientClass(connStr);

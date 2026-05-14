@@ -174,15 +174,34 @@ html, body {
 
 .aarm-table th {
     background: var(--bg-card);
-    color: var(--text-muted);
+    color: var(--text);
     font-weight: 600;
     padding: 0.6rem 0.75rem;
     text-align: left;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 2px solid var(--border);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    white-space: nowrap;
 }
+
+.aarm-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.aarm-table th.sortable:hover {
+    color: var(--accent);
+}
+
+.aarm-table th .sort-icon {
+    display: inline-block;
+    margin-left: 4px;
+    opacity: 0.45;
+    font-size: 0.7rem;
+}
+
+.aarm-table th.sort-active .sort-icon { opacity: 1; color: var(--accent); }
 
 .aarm-table td {
     padding: 0.55rem 0.75rem;
@@ -192,8 +211,13 @@ html, body {
 }
 
 .aarm-table tr:hover td {
-    background: rgba(203,166,247,0.12);
-    color: #ffffff;
+    background: rgba(203,166,247,0.18);
+    color: #f4f4f5;
+}
+
+.aarm-table tr:hover td .badge-risk,
+.aarm-table tr:hover td code {
+    filter: brightness(1.15);
 }
 
 .aarm-table code {
@@ -267,6 +291,8 @@ html, body {
 .aarm-card.aarm-card-high     .aarm-card-value { color: var(--risk-high); }
 .aarm-card.aarm-card-medium   .aarm-card-value { color: var(--risk-medium); }
 .aarm-card.aarm-card-info     .aarm-card-value { color: var(--text-muted); }
+.aarm-card:hover { border-color: var(--accent); transform: translateY(-1px); transition: all .15s; }
+.aarm-card.aarm-card-active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(203,166,247,.35); }
 
 /* ── Preflight ────────────────────────────────────────────────────────────── */
 

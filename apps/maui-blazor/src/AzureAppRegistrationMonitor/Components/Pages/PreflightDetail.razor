@@ -23,7 +23,7 @@
     <button class="btn btn-primary btn-sm"
             @onclick="RunPreflightAsync"
             disabled="@(string.IsNullOrEmpty(_selectedTenant) || _loading)">
-        @(_loading ? "Running…" : "Run preflight")
+        @(_loading ? "Running…" : "↻ Run preflight")
     </button>
 </div>
 
@@ -139,7 +139,11 @@ else
 
         AppState.OnChange += OnAppStateChanged;
 
-        if (!string.IsNullOrEmpty(TenantName))
+        // Auto-load cached result; only run live if navigated via deep link
+        if (!string.IsNullOrEmpty(_selectedTenant))
+            await LoadCachedAsync();
+
+        if (!string.IsNullOrEmpty(TenantName) && _result is null)
             await RunPreflightAsync();
     }
 
@@ -154,11 +158,24 @@ else
         }
     }
 
+    private async Task LoadCachedAsync()
+    {
+        try
+        {
+            var tenant = _tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant);
+            if (tenant is null) return;
+            var envelope = await DataProvider.GetPreflightAsync(tenant.TenantId, null);
+            _result = envelope?.Data;
+        }
+        catch { /* no cached data */ }
+    }
+
     private void OnTenantChanged(ChangeEventArgs e)
     {
         _selectedTenant = e.Value?.ToString() ?? "";
         AppState.SetActiveTenant(_tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant));
         _result = null;
+        _ = LoadCachedAsync();
     }
 
     public void Dispose() => AppState.OnChange -= OnAppStateChanged;

@@ -24,17 +24,14 @@
     <button class="btn btn-primary btn-sm"
             @onclick="ScanAsync"
             disabled="@(string.IsNullOrEmpty(_selectedTenant) || _loading)">
-        @(_loading ? "Scanning…" : "Scan now")
+        @(_loading ? "Scanning…" : (SettingsSvc.Settings.AppMode == "cloud" ? "↻ Refresh" : "Scan now"))
     </button>
 
     @if (SettingsSvc.Settings.LastScannedTenant == _selectedTenant && SettingsSvc.Settings.LastScanTime is not null)
     {
         <span style="color:var(--text-muted);font-size:.8rem">
             Last scan: <strong>@SettingsSvc.StalenessText</strong>
-            @if (_fromCache)
-            {
-                <span> · cached</span>
-            }
+            @if (_fromCache) { <span> · cached</span> }
         </span>
     }
 </div>
@@ -56,34 +53,45 @@ else if (_apps is null)
 }
 else
 {
+    @* ── Cards ─────────────────────────────────────────────────────────────── *@
     <div class="aarm-dashboard-cards">
-        <div class="aarm-card">
+        <div class="aarm-card @(_filter == "all" ? "aarm-card-active" : "")"
+             @onclick='() => SetFilter("all")' style="cursor:pointer">
             <div class="aarm-card-value">@_apps.Count</div>
             <div class="aarm-card-label">App Registrations</div>
         </div>
-        <div class="aarm-card">
+        <div class="aarm-card @(_filter == "all" ? "aarm-card-active" : "")"
+             @onclick='() => SetFilter("all")' style="cursor:pointer">
             <div class="aarm-card-value">@_apps.Sum(a => a.SecretCount)</div>
-            <div class="aarm-card-label">Secrets</div>
+            <div class="aarm-card-label">Total Secrets</div>
         </div>
-        <div class="aarm-card aarm-card-critical">
+        <div class="aarm-card aarm-card-critical @(_filter == "expired" ? "aarm-card-active" : "")"
+             @onclick='() => SetFilter("expired")' style="cursor:pointer"
+             title="Show expired secrets">
             <div class="aarm-card-value">@_apps.Sum(a => a.ExpiredSecretCount)</div>
             <div class="aarm-card-label">Expired</div>
         </div>
-        <div class="aarm-card aarm-card-high">
+        <div class="aarm-card aarm-card-high @(_filter == "exp30" ? "aarm-card-active" : "")"
+             @onclick='() => SetFilter("exp30")' style="cursor:pointer"
+             title="Show secrets expiring within 30 days">
             <div class="aarm-card-value">@_expiring30</div>
-            <div class="aarm-card-label">Expiring ≤30 days</div>
+            <div class="aarm-card-label">Expiring ≤30 d</div>
         </div>
-        <div class="aarm-card aarm-card-medium">
+        <div class="aarm-card aarm-card-medium @(_filter == "exp90" ? "aarm-card-active" : "")"
+             @onclick='() => SetFilter("exp90")' style="cursor:pointer"
+             title="Show secrets expiring within 90 days">
             <div class="aarm-card-value">@_expiring90</div>
-            <div class="aarm-card-label">Expiring ≤90 days</div>
+            <div class="aarm-card-label">Expiring ≤90 d</div>
         </div>
-        <div class="aarm-card aarm-card-info">
+        <div class="aarm-card aarm-card-info @(_filter == "highrisk" ? "aarm-card-active" : "")"
+             @onclick='() => SetFilter("highrisk")' style="cursor:pointer"
+             title="Show High/Critical apps">
             <div class="aarm-card-value">@_highRiskApps</div>
             <div class="aarm-card-label">High/Critical apps</div>
         </div>
     </div>
 
-    <div class="d-flex gap-2 mt-2">
+    <div class="d-flex gap-2 mt-2 mb-3 align-items-center">
         <a class="btn btn-outline-danger btn-sm"
            href="/secrets/@Uri.EscapeDataString(_selectedTenant ?? "")">
             View all secrets
@@ -92,29 +100,71 @@ else
            href="/history/@Uri.EscapeDataString(_selectedTenant ?? "")">
             Scan history
         </a>
+        @if (_filter != "all")
+        {
+            <button class="btn btn-link btn-sm p-0 ms-1"
+                    @onclick='() => SetFilter("all")'
+                    style="color:var(--text-muted);font-size:.8rem">
+                ✕ Clear filter
+            </button>
+        }
     </div>
 
-    @if (_apps.Any(a => a.RiskLevel is "Critical" or "High"))
+    @* ── Filtered table ─────────────────────────────────────────────────────── *@
+    @{
+        var tableApps = GetFilteredApps();
+        var tableTitle = _filter switch
+        {
+            "expired"  => "Expired secrets",
+            "exp30"    => "Secrets expiring within 30 days",
+            "exp90"    => "Secrets expiring within 90 days",
+            "highrisk" => "High / Critical apps",
+            _          => "Urgent attention"
+        };
+        var urgentApps = _filter == "all"
+            ? _apps.Where(a => a.RiskLevel is "Critical" or "High").ToList()
+            : tableApps;
+    }
+
+    @if (urgentApps.Any())
     {
-        <h3 class="mt-4" style="font-size:1rem;font-weight:600">Urgent attention</h3>
+        <h3 style="font-size:1rem;font-weight:600;margin-bottom:.5rem">@tableTitle</h3>
         <table class="aarm-table">
             <thead>
-                <tr><th>Risk</th><th>App</th><th>Expired</th><th>Expiring ≤30d</th></tr>
+                <tr>
+                    <th>Risk</th>
+                    <th>App</th>
+                    <th>Secrets</th>
+                    <th>Expired</th>
+                    <th>Expiring ≤30d</th>
+                </tr>
             </thead>
             <tbody>
-                @foreach (var a in _apps.Where(a => a.RiskLevel is "Critical" or "High")
-                                        .OrderByDescending(a => a.ExpiredSecretCount)
-                                        .Take(10))
+                @foreach (var a in urgentApps.OrderByDescending(a => a.ExpiredSecretCount)
+                                             .ThenByDescending(a => a.ExpiringSecretCount)
+                                             .Take(20))
                 {
                     <tr>
                         <td><span class="badge-risk @a.RiskLevel.ToLower()">@a.RiskLevel</span></td>
                         <td>@a.DisplayName</td>
+                        <td>@a.SecretCount</td>
                         <td class="@(a.ExpiredSecretCount > 0 ? "risk-critical" : "")">@a.ExpiredSecretCount</td>
                         <td class="@(a.ExpiringSecretCount > 0 ? "risk-high" : "")">@a.ExpiringSecretCount</td>
                     </tr>
                 }
             </tbody>
         </table>
+        @if (urgentApps.Count > 20)
+        {
+            <p style="font-size:.78rem;color:var(--text-muted);margin-top:.5rem">
+                Showing top 20 of @urgentApps.Count.
+                <a href="/secrets/@Uri.EscapeDataString(_selectedTenant ?? "")" style="color:var(--accent)">View all →</a>
+            </p>
+        }
+    }
+    else if (_filter != "all")
+    {
+        <div class="aarm-empty" style="padding:1rem">No apps match this filter.</div>
     }
 }
 
@@ -126,6 +176,7 @@ else
     private List<AppRegistrationSummary>? _apps;
     private bool _fromCache;
     private readonly List<string> _progressLines = new();
+    private string _filter = "all";
 
     private int _expiring30;
     private int _expiring90;
@@ -134,16 +185,12 @@ else
     protected override async Task OnInitializedAsync()
     {
         _tenants = await DataProvider.GetTenantsAsync();
-
-        // Pre-select: AppState → last scanned → default → first tenant
         _selectedTenant =
             AppState.ActiveTenant?.DisplayName ??
             SettingsSvc.Settings.LastScannedTenant ??
             SettingsSvc.Settings.DefaultTenant ??
             (_tenants.Count > 0 ? _tenants[0].DisplayName : "");
-
         AppState.OnChange += OnAppStateChanged;
-
         if (!string.IsNullOrEmpty(_selectedTenant))
             await TryLoadFromCacheAsync();
     }
@@ -155,6 +202,7 @@ else
         {
             _selectedTenant = AppState.ActiveTenant.DisplayName;
             _apps = null;
+            _filter = "all";
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -164,18 +212,55 @@ else
         _selectedTenant = e.Value?.ToString() ?? "";
         AppState.SetActiveTenant(_tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant));
         _apps = null;
+        _filter = "all";
         await TryLoadFromCacheAsync();
     }
 
     public void Dispose() => AppState.OnChange -= OnAppStateChanged;
 
+    private void SetFilter(string filter)
+    {
+        _filter = filter;
+    }
+
+    private List<AppRegistrationSummary> GetFilteredApps()
+    {
+        if (_apps is null) return new();
+        var all = _apps.SelectMany(a => a.Secrets).ToList();
+        return _filter switch
+        {
+            "expired"  => _apps.Where(a => a.ExpiredSecretCount > 0).ToList(),
+            "exp30"    => _apps.Where(a => a.Secrets.Any(s => s.DaysUntilExpiry is >= 0 and <= 30)).ToList(),
+            "exp90"    => _apps.Where(a => a.Secrets.Any(s => s.DaysUntilExpiry is >= 0 and <= 90)).ToList(),
+            "highrisk" => _apps.Where(a => a.RiskLevel is "Critical" or "High").ToList(),
+            _          => _apps.ToList(),
+        };
+    }
+
     private async Task TryLoadFromCacheAsync()
     {
-        var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
-        if (tenant is null) return;
+        if (SettingsSvc.Settings.AppMode == "cloud")
+        {
+            // Cloud Mode: fetch from API
+            var tenant = _tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant);
+            if (tenant is null) return;
+            try
+            {
+                var envelope = await DataProvider.GetAppsAsync(tenant.TenantId, null);
+                if (envelope?.Data is not null)
+                {
+                    _apps = envelope.Data.ToList();
+                    _fromCache = true;
+                    ComputeStats();
+                }
+            }
+            catch { /* no data yet */ }
+            return;
+        }
 
-        var history = await HistoryRepo.GetHistoryAsync(tenant.TenantId, maxEntries: 1);
-
+        var localTenant = await TenantRepo.GetTenantAsync(_selectedTenant);
+        if (localTenant is null) return;
+        var history = await HistoryRepo.GetHistoryAsync(localTenant.TenantId, maxEntries: 1);
         if (history.Count > 0)
         {
             _apps = history[0].Apps.ToList();
@@ -194,17 +279,21 @@ else
         DataProvider.ProgressMessage += OnProgress;
         try
         {
-            var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
-            var envelope = await DataProvider.GetAppsAsync(
-                tenant?.TenantId ?? _selectedTenant,
-                null);
-            _apps = envelope?.Data?.ToList() ?? new();
+            if (SettingsSvc.Settings.AppMode == "cloud")
+            {
+                var tenant = _tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant);
+                var envelope = await DataProvider.GetAppsAsync(tenant?.TenantId ?? _selectedTenant, null);
+                _apps = envelope?.Data?.ToList() ?? new();
+            }
+            else
+            {
+                var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
+                var envelope = await DataProvider.GetAppsAsync(tenant?.TenantId ?? _selectedTenant, null);
+                _apps = envelope?.Data?.ToList() ?? new();
+                if (tenant is not null) await HistoryRepo.SaveScanAsync(tenant.TenantId, _apps);
+                await SettingsSvc.RecordScanAsync(_selectedTenant);
+            }
             ComputeStats();
-
-            if (tenant is not null)
-                await HistoryRepo.SaveScanAsync(tenant.TenantId, _apps);
-
-            await SettingsSvc.RecordScanAsync(_selectedTenant);
         }
         catch (Exception ex) { _error = ex.Message; }
         finally
@@ -229,5 +318,4 @@ else
         _expiring90   = all.Count(s => s.DaysUntilExpiry is >= 0 and <= 90);
         _highRiskApps = _apps.Count(a => a.RiskLevel is "Critical" or "High");
     }
-
 }
