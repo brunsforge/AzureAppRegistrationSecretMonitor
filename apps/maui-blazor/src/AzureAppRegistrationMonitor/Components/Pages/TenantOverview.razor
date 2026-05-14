@@ -787,7 +787,7 @@ else
         {
             var accepted = await DataProvider.TriggerScanAsync(tenant.TenantId);
             _scanMessage = accepted
-                ? $"✓ Scan triggered for \"{tenant.DisplayName}\". Results and Teams notifications arrive shortly."
+                ? $"✓ Scan triggered for \"{tenant.DisplayName}\". Results will be available in a few seconds — refresh the Secrets or Preflight page."
                 : $"✗ Scan trigger rejected for \"{tenant.DisplayName}\".";
         }
         catch (Exception ex)

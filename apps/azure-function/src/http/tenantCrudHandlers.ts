@@ -1,5 +1,6 @@
 import { app } from '@azure/functions';
 import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
+import { ClientSecretCredential } from '@azure/identity';
 import { getJobConfigStore, getRuntimeStateStore } from '../storage/stores.js';
 import { getSecret, setSecret, deleteSecret, kvSecretName } from '../storage/KeyVaultCredentialStore.js';
 import type { JobConfig } from '../types/JobConfig.js';
@@ -67,6 +68,16 @@ async function addTenantHandler(req: HttpRequest, context: InvocationContext): P
     if (body.authMode === 'client-secret') {
       if (!body.credentialValue) return json({ error: 'credentialValue required for client-secret mode' }, 400);
       if (!body.clientId) return json({ error: 'clientId required for client-secret mode' }, 400);
+
+      // Validate credentials before persisting — fail fast with a clear error.
+      const authError = await testClientSecretCredential(body.tenantId, body.clientId, body.credentialValue);
+      if (authError) {
+        return json({
+          error: `Authentication failed — credentials are invalid or insufficient. Check Tenant ID, Client ID and Secret value.`,
+          detail: authError,
+        }, 422);
+      }
+
       credentialRef = kvSecretName(jobId);
       await setSecret(credentialRef, body.credentialValue);
       context.log(`KV secret '${credentialRef}' stored for job '${jobId}'`);
@@ -205,6 +216,24 @@ function jobToProfile(job: JobConfig, lastRunAt: string | null) {
     lastPreflightAt:         lastRunAt,
     lastSuccessfulScanAt:    lastRunAt,
   };
+}
+
+/**
+ * Tries to acquire a Graph token using the provided client-secret credential.
+ * Returns null on success, or an error message string on failure.
+ */
+async function testClientSecretCredential(
+  tenantId: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<string | null> {
+  try {
+    const cred = new ClientSecretCredential(tenantId, clientId, clientSecret);
+    await cred.getToken('https://graph.microsoft.com/.default');
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
 }
 
 function slugify(text: string): string {
