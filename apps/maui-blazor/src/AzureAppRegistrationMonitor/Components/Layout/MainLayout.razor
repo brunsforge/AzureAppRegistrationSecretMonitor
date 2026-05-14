@@ -3,6 +3,7 @@
 @inject SettingsService SettingsSvc
 @inject NavigationManager Nav
 @inject AppStateService AppState
+@inject CredentialRepository CredRepo
 
 <div class="aarm-layout">
     <nav class="aarm-sidebar">
@@ -52,8 +53,10 @@
             </li>
             @if (SettingsSvc.Settings.AppMode == "cloud" && !string.IsNullOrWhiteSpace(SettingsSvc.Settings.CloudBaseUri))
             {
-                var baseUrl = SettingsSvc.Settings.CloudBaseUri.TrimEnd('/');
+                var baseUrl       = SettingsSvc.Settings.CloudBaseUri.TrimEnd('/');
                 var activeTenantId = AppState.ActiveTenant?.TenantId ?? "";
+                var fnKey         = CredRepo.GetCloudFunctionKey() ?? "";
+                var keyParam      = string.IsNullOrEmpty(fnKey) ? "" : $"&code={Uri.EscapeDataString(fnKey)}";
                 <li style="border-top:1px solid var(--border);margin-top:auto;padding-top:.25rem">
                     <a href="@baseUrl/api/dashboard"
                        target="_blank" rel="noopener"
@@ -64,9 +67,9 @@
                     </a>
                     @if (!string.IsNullOrEmpty(activeTenantId))
                     {
-                        <a href="@baseUrl/api/report?tenant=@activeTenantId"
+                        <a href="@($"{baseUrl}/api/report?tenant={activeTenantId}{keyParam}")"
                            target="_blank" rel="noopener"
-                           title="Static snapshot report — no JS, printable"
+                           title="Static snapshot report — server-rendered, no JS, printable"
                            style="display:flex;align-items:center;gap:.5rem;padding:.5rem 1.25rem;
                                   color:var(--text-muted);font-size:.8rem;text-decoration:none">
                             <span>📄</span> Snapshot Report ↗
