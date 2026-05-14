@@ -99,6 +99,14 @@ public class CloudHttpDataProvider : IDataProvider
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<bool> SendTestMailAsync(string templateKey, string[] to, Dictionary<string, string> demoData)
+    {
+        var content = Serialize(new { channel = "mail", templateKey, to, demoData });
+        var response = await _http.PostAsync("notifications/test", content);
+        await EnsureSuccessAsync(response);
+        return true;
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private async Task<ResultEnvelope<T>?> GetAsync<T>(string relativeUrl)

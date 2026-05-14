@@ -38,4 +38,10 @@ public interface IDataProvider
 
     /// <summary>Deletes a tenant/job and its stored credential.</summary>
     Task<bool> DeleteTenantAsync(string tenantId);
+
+    /// <summary>
+    /// Cloud Mode: sends a test mail via the Azure Function (POST /api/notifications/test).
+    /// Local Mode: not supported — returns false.
+    /// </summary>
+    Task<bool> SendTestMailAsync(string templateKey, string[] to, Dictionary<string, string> demoData);
 }

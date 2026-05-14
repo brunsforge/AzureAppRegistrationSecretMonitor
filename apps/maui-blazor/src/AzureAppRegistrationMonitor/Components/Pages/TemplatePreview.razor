@@ -1,5 +1,7 @@
 @page "/template-preview"
 @inject SettingsService SettingsSvc
+@inject IDataProvider DataProvider
+@inject TeamsNotificationService TeamsSvc
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
@@ -119,6 +121,65 @@
     </div>
 }
 
+@* ── Send test notification ────────────────────────────────────────────────── *@
+<div style="margin-top:2rem;background:var(--surface);border:1px solid var(--border);border-radius:.5rem;padding:1.25rem">
+    <h2 style="font-size:.95rem;font-weight:600;margin-bottom:1rem">Send test notification</h2>
+
+    @if (_isTeams)
+    {
+        <div class="d-flex gap-2 align-items-end flex-wrap">
+            <div style="flex:1;min-width:300px">
+                <label class="form-label" style="font-size:.78rem;font-weight:600">Webhook URL</label>
+                <input class="form-control form-control-sm" @bind="_testWebhookUrl"
+                       placeholder="https://xxx.webhook.office.com/webhookb2/..." />
+            </div>
+            <button class="btn btn-sm btn-outline-primary" @onclick="SendTeamsTestAsync"
+                    disabled="@(_isSending || string.IsNullOrWhiteSpace(_testWebhookUrl))">
+                @(_isSending ? "Sending…" : "Send to Teams")
+            </button>
+        </div>
+        <p style="font-size:.76rem;color:var(--text-muted);margin:.5rem 0 0">
+            Sends the current template payload directly from AARM to the webhook URL.
+        </p>
+    }
+    else
+    {
+        @if (DataProvider.IsCloudMode)
+        {
+            <div class="d-flex gap-2 align-items-end flex-wrap">
+                <div style="flex:1;min-width:300px">
+                    <label class="form-label" style="font-size:.78rem;font-weight:600">Recipients</label>
+                    <input class="form-control form-control-sm" @bind="_testMailTo"
+                           placeholder="alice@example.com, bob@example.com" />
+                </div>
+                <button class="btn btn-sm btn-outline-primary" @onclick="SendMailTestAsync"
+                        disabled="@(_isSending || string.IsNullOrWhiteSpace(_testMailTo))">
+                    @(_isSending ? "Sending…" : "Send test mail")
+                </button>
+            </div>
+            <p style="font-size:.76rem;color:var(--text-muted);margin:.5rem 0 0">
+                Sends via ACS from the Azure Function. Requires <code>AARM_ACS_CONNECTION_STRING</code> and <code>AARM_ACS_SENDER_EMAIL</code>.
+            </p>
+        }
+        else
+        {
+            <p style="font-size:.82rem;color:var(--text-muted);margin:0">
+                Mail test requires Cloud Mode with ACS configured on the Azure Function.
+            </p>
+        }
+    }
+
+    @if (_testResultMsg is not null)
+    {
+        <div style="margin-top:.75rem;padding:.5rem .75rem;border-radius:.375rem;font-size:.82rem;
+                    background:@(_testResultOk ? "rgba(22,163,74,.1)" : "rgba(220,38,38,.1)");
+                    border:1px solid @(_testResultOk ? "rgba(22,163,74,.25)" : "rgba(220,38,38,.25)");
+                    color:@(_testResultOk ? "#16a34a" : "#dc2626")">
+            @_testResultMsg
+        </div>
+    }
+</div>
+
 @* ── Notification flow documentation ──────────────────────────────────────── *@
 <div id="notification-flow" style="margin-top:2.5rem">
     <h2 style="font-size:1rem;font-weight:600;margin-bottom:1rem">Notification flow</h2>
@@ -204,6 +265,13 @@
     private int    _demoExpiring = 8;
     private int    _demoCritical = 3;
 
+    // Test notification state
+    private string  _testWebhookUrl = "";
+    private string  _testMailTo     = "";
+    private bool    _isSending      = false;
+    private string? _testResultMsg  = null;
+    private bool    _testResultOk   = false;
+
     private bool _isTeams => _selectedTemplate.StartsWith("teams-");
 
     private static readonly Dictionary<string, string> Placeholders = new()
@@ -286,6 +354,53 @@
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    // ── Test notification handlers ────────────────────────────────────────────
+
+    private async Task SendTeamsTestAsync()
+    {
+        _isSending = true; _testResultMsg = null; StateHasChanged();
+        try
+        {
+            await TeamsSvc.SendRawAsync(_testWebhookUrl, GetCurrentJson());
+            _testResultOk = true;
+            _testResultMsg = "Sent successfully to Teams webhook.";
+        }
+        catch (Exception ex)
+        {
+            _testResultOk = false;
+            _testResultMsg = $"Send failed: {ex.Message}";
+        }
+        finally { _isSending = false; StateHasChanged(); }
+    }
+
+    private async Task SendMailTestAsync()
+    {
+        _isSending = true; _testResultMsg = null; StateHasChanged();
+        try
+        {
+            var to = _testMailTo.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (to.Length == 0) { _testResultOk = false; _testResultMsg = "Enter at least one recipient."; return; }
+            await DataProvider.SendTestMailAsync(ToApiTemplateKey(_selectedTemplate), to, LiveCtx);
+            _testResultOk = true;
+            _testResultMsg = $"Test mail sent to {string.Join(", ", to)}.";
+        }
+        catch (Exception ex)
+        {
+            _testResultOk = false;
+            _testResultMsg = $"Send failed: {ex.Message}";
+        }
+        finally { _isSending = false; StateHasChanged(); }
+    }
+
+    private static string ToApiTemplateKey(string uiKey) => uiKey switch
+    {
+        "mail-critical" => "emailCritical",
+        "mail-expiring" => "emailExpiring",
+        "mail-summary"  => "emailSummary",
+        "mail-error"    => "emailError",
+        _ => "emailSummary",
+    };
 
     // ── Built-in templates ────────────────────────────────────────────────────
 

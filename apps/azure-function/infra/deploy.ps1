@@ -131,7 +131,7 @@ Write-Host "[3/3] Deploying code to '$fnName'..." -ForegroundColor Cyan
 
 Push-Location $deployDir
 try {
-    func azure functionapp publish $fnName --typescript
+    func azure functionapp publish $fnName --no-build
     if ($LASTEXITCODE -ne 0) { throw 'Code deployment failed.' }
 } finally {
     Pop-Location

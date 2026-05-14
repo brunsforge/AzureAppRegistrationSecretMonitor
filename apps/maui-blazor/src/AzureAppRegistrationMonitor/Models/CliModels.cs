@@ -28,7 +28,19 @@ public record TenantProfile(
     [property: JsonPropertyName("createdAt")] string CreatedAt,
     [property: JsonPropertyName("updatedAt")] string UpdatedAt,
     [property: JsonPropertyName("lastPreflightAt")] string? LastPreflightAt,
-    [property: JsonPropertyName("lastSuccessfulScanAt")] string? LastSuccessfulScanAt
+    [property: JsonPropertyName("lastSuccessfulScanAt")] string? LastSuccessfulScanAt,
+    [property: JsonPropertyName("notifications")] TenantNotificationChannels? Notifications = null
+);
+
+public record TenantNotificationChannels(
+    [property: JsonPropertyName("teamsStatus")]  bool TeamsStatus,
+    [property: JsonPropertyName("teamsAlerts")]  bool TeamsAlerts,
+    [property: JsonPropertyName("teamsErrors")]  bool TeamsErrors,
+    [property: JsonPropertyName("mailCount")]    int  MailCount,
+    [property: JsonPropertyName("mailCritical")] bool MailCritical,
+    [property: JsonPropertyName("mailExpiring")] bool MailExpiring,
+    [property: JsonPropertyName("mailStatus")]   bool MailStatus,
+    [property: JsonPropertyName("mailError")]    bool MailError
 );
 
 /// <summary>Owner of an App Registration (user or service principal).</summary>

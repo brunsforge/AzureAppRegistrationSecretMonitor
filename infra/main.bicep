@@ -262,6 +262,8 @@ resource fn 'Microsoft.Web/sites@2023-12-01' = {
   properties: {
     serverFarmId: plan.id
     httpsOnly: true
+    // Required when using UAMI: tells the runtime which identity to use for Key Vault reference resolution.
+    keyVaultReferenceIdentity: uami.id
     functionAppConfig: {
       deployment: {
         storage: {

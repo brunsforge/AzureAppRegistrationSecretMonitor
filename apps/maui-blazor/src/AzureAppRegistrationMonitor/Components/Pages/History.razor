@@ -2,6 +2,8 @@
 @page "/history/{TenantName}"
 @inject HistoryRepository HistoryRepo
 @inject TenantConfigRepository TenantRepo
+@inject IDataProvider DataProvider
+@inject SettingsService SettingsSvc
 @inject AppStateService AppState
 @implements IDisposable
 
@@ -37,8 +39,20 @@ else if (_error is not null)
 else if (_history is null || _history.Count == 0)
 {
     <div class="aarm-empty">
-        <p>No scan history yet for this tenant.</p>
-        <p>Run a scan from the <a href="/dashboard">Dashboard</a> to start building history.</p>
+        @if (SettingsSvc.Settings.AppMode == "cloud")
+        {
+            <p>Local scan history is not available in Cloud Mode.</p>
+            <p style="font-size:.82rem;color:var(--text-muted)">
+                Scan results are stored in Azure Blob Storage by the Azure Function.
+                Use the <a href="@(SettingsSvc.Settings.CloudBaseUri)/api/dashboard" target="_blank" rel="noopener" style="color:var(--accent)">Cloud Dashboard ↗</a>
+                to view historical data.
+            </p>
+        }
+        else
+        {
+            <p>No scan history yet for this tenant.</p>
+            <p>Run a scan from the <a href="/dashboard">Dashboard</a> to start building history.</p>
+        }
     </div>
 }
 else
@@ -87,7 +101,9 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        _tenants = await TenantRepo.ListTenantsAsync();
+        _tenants = SettingsSvc.Settings.AppMode == "cloud"
+            ? await DataProvider.GetTenantsAsync()
+            : await TenantRepo.ListTenantsAsync();
 
         _selectedTenant =
             (!string.IsNullOrEmpty(TenantName) ? TenantName : null) ??

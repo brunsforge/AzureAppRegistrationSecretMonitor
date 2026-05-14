@@ -1,7 +1,7 @@
 import { app } from '@azure/functions';
 import type { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { ClientSecretCredential } from '@azure/identity';
-import { getJobConfigStore, getRuntimeStateStore } from '../storage/stores.js';
+import { getJobConfigStore, getRuntimeStateStore, getResultStore } from '../storage/stores.js';
 import { getSecret, setSecret, deleteSecret, kvSecretName } from '../storage/KeyVaultCredentialStore.js';
 import type { JobConfig } from '../types/JobConfig.js';
 
@@ -162,10 +162,12 @@ async function deleteTenantHandler(req: HttpRequest, context: InvocationContext)
     const [removed] = config.jobs.splice(idx, 1);
     await store.writeJobs(config);
 
-    // Clean up KV secret and runtime state
+    // Clean up KV secret and runtime state blob.
+    // Scan results (latest/ + history/) are intentionally kept so re-adding the tenant
+    // with the same Tenant ID restores historical data.
     await Promise.allSettled([
       removed.credentialRef ? deleteSecret(removed.credentialRef) : Promise.resolve(),
-      getRuntimeStateStore().read(removed.id).then(() => {/* state stays for audit */}),
+      deleteRuntimeState(removed.id),
     ]);
 
     context.log(`Tenant ${tenantId} (job '${removed.id}') deleted`);
@@ -204,6 +206,7 @@ function buildJobConfig(
 
 function jobToProfile(job: JobConfig, lastRunAt: string | null) {
   const now = new Date().toISOString();
+  const mail = job.mailTargets;
   return {
     tenantId:                job.tenantId,
     displayName:             job.tenantDisplayName,
@@ -215,7 +218,22 @@ function jobToProfile(job: JobConfig, lastRunAt: string | null) {
     updatedAt:               now,
     lastPreflightAt:         lastRunAt,
     lastSuccessfulScanAt:    lastRunAt,
+    notifications: {
+      teamsStatus: !!(job.teamsWebhooks?.status),
+      teamsAlerts: !!(job.teamsWebhooks?.alerts),
+      teamsErrors: !!(job.teamsWebhooks?.errors),
+      mailCount:   mail?.to?.length ?? 0,
+      mailCritical: mail ? (mail.sendOnCritical ?? true) : false,
+      mailExpiring: mail ? (mail.sendOnExpiring ?? true) : false,
+      mailStatus:   mail ? (mail.sendOnStatus   ?? false) : false,
+      mailError:    mail ? (mail.sendOnError     ?? true) : false,
+    },
   };
+}
+
+/** Deletes the runtime state blob for a job (called on tenant delete). */
+async function deleteRuntimeState(jobId: string): Promise<void> {
+  try { await getRuntimeStateStore().delete(jobId); } catch { /* ignore */ }
 }
 
 /**

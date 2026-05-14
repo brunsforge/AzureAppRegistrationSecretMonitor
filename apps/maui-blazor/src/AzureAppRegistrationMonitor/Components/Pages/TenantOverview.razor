@@ -380,6 +380,7 @@ else
                 <th>Auth Mode</th>
                 <th>Preflight</th>
                 <th>Last scan</th>
+                @if (_isCloudMode) { <th>Notifications</th> }
                 <th></th>
             </tr>
         </thead>
@@ -423,6 +424,39 @@ else
                             ? dt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")
                             : "Never")
                     </td>
+                    @if (_isCloudMode)
+                    {
+                        <td style="white-space:nowrap;font-size:.7rem;line-height:1.9">
+                            @if (tenant.Notifications is { } n)
+                            {
+                                <div title="Teams: Status / Alerts / Errors">
+                                    <span style="color:var(--text-muted);display:inline-block;width:1.1rem">T</span>
+                                    @NotifChip("Sta", n.TeamsStatus)
+                                    @NotifChip("Alr", n.TeamsAlerts)
+                                    @NotifChip("Err", n.TeamsErrors)
+                                </div>
+                                <div title="Mail: Critical / Expiring / Error / Status">
+                                    <span style="color:var(--text-muted);display:inline-block;width:1.1rem">M</span>
+                                    @if (n.MailCount > 0)
+                                    {
+                                        @NotifChip("Crit", n.MailCritical)
+                                        @NotifChip("Exp",  n.MailExpiring)
+                                        @NotifChip("Err",  n.MailError)
+                                        @NotifChip("Sta",  n.MailStatus)
+                                        <span style="color:var(--text-muted);font-size:.65rem;margin-left:.1rem">@n.MailCount×</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:var(--text-muted)">—</span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <span style="color:var(--text-muted)">—</span>
+                            }
+                        </td>
+                    }
                     <td style="white-space:nowrap">
                         @if (!_isCloudMode)
                         {
@@ -771,6 +805,14 @@ else
                 _cloudEditTenantId is null ? "Tenant added" : "Tenant updated",
                 $"\"{_cf.TenantDisplayName}\" saved. Credential stored in Azure Key Vault.");
 
+            // Set new/updated tenant as active and default
+            if (result is not null)
+            {
+                AppState.SetActiveTenant(result);
+                SettingsSvc.Settings.DefaultTenant = result.TenantId;
+                await SettingsSvc.SaveAsync();
+            }
+
             _showCloudForm = false;
             await LoadAsync();
         }
@@ -812,6 +854,14 @@ else
         _fPassword      = "";
         _fWorkspaceId   = "";
         _formError      = null;
+    }
+
+    private static MarkupString NotifChip(string label, bool on)
+    {
+        var style = on
+            ? "display:inline-block;padding:.05rem .28rem;border-radius:.2rem;font-size:.68rem;margin-right:.12rem;background:rgba(22,163,74,.12);color:#16a34a;border:1px solid rgba(22,163,74,.25)"
+            : "display:inline-block;padding:.05rem .28rem;border-radius:.2rem;font-size:.68rem;margin-right:.12rem;color:var(--text-muted);border:1px solid var(--border)";
+        return new MarkupString($"<span style=\"{style}\">{label}</span>");
     }
 
     public void Dispose() { }

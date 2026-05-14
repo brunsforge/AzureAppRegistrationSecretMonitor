@@ -79,6 +79,9 @@ public class LocalCliDataProvider : IDataProvider
         return profile;
     }
 
+    public Task<bool> SendTestMailAsync(string templateKey, string[] to, Dictionary<string, string> demoData)
+        => Task.FromResult(false);
+
     public async Task<bool> DeleteTenantAsync(string tenantId)
     {
         var tenant = await _tenantRepo.GetTenantAsync(tenantId);

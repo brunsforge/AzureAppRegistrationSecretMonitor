@@ -55,6 +55,9 @@ public class DelegatingDataProvider : IDataProvider
     public Task<bool> DeleteTenantAsync(string tenantId)
         => _inner.DeleteTenantAsync(tenantId);
 
+    public Task<bool> SendTestMailAsync(string templateKey, string[] to, Dictionary<string, string> demoData)
+        => _inner.SendTestMailAsync(templateKey, to, demoData);
+
     private void OnInnerProgress(string msg) => ProgressMessage?.Invoke(msg);
     private void WireEvents() => _inner.ProgressMessage += OnInnerProgress;
 }

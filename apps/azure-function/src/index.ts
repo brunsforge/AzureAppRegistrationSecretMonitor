@@ -13,3 +13,4 @@ import './http/dataHandlers.js';
 import './http/tenantCrudHandlers.js';
 import './http/dashboardHandler.js';
 import './http/reportHandler.js';
+import './http/testNotificationHandler.js';

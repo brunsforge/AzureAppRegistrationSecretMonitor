@@ -110,6 +110,19 @@ public class TeamsNotificationService
         await PostAsync(url, card);
     }
 
+    /// <summary>Posts a raw JSON string to a Teams incoming webhook and throws on non-success.</summary>
+    public async Task SendRawAsync(string webhookUrl, string json)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        var body = new StringContent(json, Encoding.UTF8, "application/json");
+        var resp = await http.PostAsync(webhookUrl, body);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var err = await resp.Content.ReadAsStringAsync();
+            throw new InvalidOperationException($"Teams webhook returned HTTP {(int)resp.StatusCode}: {err}");
+        }
+    }
+
     private static async Task PostAsync(string url, object payload)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };

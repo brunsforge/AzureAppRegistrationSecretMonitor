@@ -27,6 +27,7 @@ async function tenantsHandler(context: InvocationContext): Promise<HttpResponseI
     const byTenant = new Map<string, {
       displayName: string; authMode: string; clientId: string | null;
       logAnalyticsWorkspaceId: string | null;
+      notifications: NotificationChannelSummary;
     }>();
     for (const job of jobs) {
       if (!byTenant.has(job.tenantId)) {
@@ -35,6 +36,7 @@ async function tenantsHandler(context: InvocationContext): Promise<HttpResponseI
           authMode:                job.authMode,
           clientId:                job.clientId ?? null,
           logAnalyticsWorkspaceId: job.logAnalytics?.workspaceId ?? null,
+          notifications:           buildNotificationSummary(job),
         });
       }
     }
@@ -60,6 +62,7 @@ async function tenantsHandler(context: InvocationContext): Promise<HttpResponseI
           updatedAt:               lastRunAt ?? now,
           lastPreflightAt:         lastRunAt,
           lastSuccessfulScanAt:    lastRunAt,
+          notifications:           meta.notifications,
         };
       }),
     );
@@ -182,6 +185,31 @@ async function findPrimaryJob(tenantId: string): Promise<JobConfig | null> {
 async function findAllJobs(tenantId: string): Promise<JobConfig[]> {
   const { jobs } = await getJobConfigStore().readJobs();
   return jobs.filter((j) => j.tenantId === tenantId);
+}
+
+interface NotificationChannelSummary {
+  teamsStatus: boolean;
+  teamsAlerts: boolean;
+  teamsErrors: boolean;
+  mailCount: number;
+  mailCritical: boolean;
+  mailExpiring: boolean;
+  mailStatus: boolean;
+  mailError: boolean;
+}
+
+function buildNotificationSummary(job: JobConfig): NotificationChannelSummary {
+  const mail = job.mailTargets;
+  return {
+    teamsStatus: !!(job.teamsWebhooks?.status),
+    teamsAlerts: !!(job.teamsWebhooks?.alerts),
+    teamsErrors: !!(job.teamsWebhooks?.errors),
+    mailCount:   mail?.to?.length ?? 0,
+    mailCritical: mail ? (mail.sendOnCritical ?? true) : false,
+    mailExpiring: mail ? (mail.sendOnExpiring ?? true) : false,
+    mailStatus:   mail ? (mail.sendOnStatus   ?? false) : false,
+    mailError:    mail ? (mail.sendOnError     ?? true) : false,
+  };
 }
 
 function json(body: unknown, status = 200): HttpResponseInit {

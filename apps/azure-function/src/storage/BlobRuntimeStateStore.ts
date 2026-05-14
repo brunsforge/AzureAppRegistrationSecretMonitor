@@ -34,6 +34,12 @@ export class BlobRuntimeStateStore {
       blobHTTPHeaders: { blobContentType: 'application/json' },
     });
   }
+
+  async delete(jobId: string): Promise<void> {
+    const container = this.blobs.getContainerClient(DATA_CONTAINER);
+    const blob = container.getBlockBlobClient(`runtime/${jobId}.json`);
+    await blob.deleteIfExists();
+  }
 }
 
 function emptyState(jobId: string): JobRuntimeState {
