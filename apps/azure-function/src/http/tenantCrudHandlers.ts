@@ -32,6 +32,13 @@ interface TenantUpsertBody {
     expiringWithinDays?: number;
     criticalWithinDays?: number;
   };
+  mailTargets?: {
+    to: string[];
+    sendOnExpiring?: boolean;
+    sendOnCritical?: boolean;
+    sendOnStatus?:   boolean;
+    sendOnError?:    boolean;
+  } | null;
   logAnalytics?: {
     workspaceId?: string | null;
     enabled?:     boolean;
@@ -200,6 +207,7 @@ function buildJobConfig(
     teamsWebhooks:            body.teamsWebhooks,
     notificationTemplates:    body.notificationTemplates,
     notificationThresholds:   body.notificationThresholds,
+    mailTargets:              body.mailTargets ?? undefined,
     logAnalytics:             body.logAnalytics,
   };
 }
@@ -223,6 +231,7 @@ function jobToProfile(job: JobConfig, lastRunAt: string | null) {
       teamsAlerts: !!(job.teamsWebhooks?.alerts),
       teamsErrors: !!(job.teamsWebhooks?.errors),
       mailCount:   mail?.to?.length ?? 0,
+      mailTo:      mail?.to ?? [],
       mailCritical: mail ? (mail.sendOnCritical ?? true) : false,
       mailExpiring: mail ? (mail.sendOnExpiring ?? true) : false,
       mailStatus:   mail ? (mail.sendOnStatus   ?? false) : false,

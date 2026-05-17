@@ -40,6 +40,12 @@ public interface IDataProvider
     Task<bool> DeleteTenantAsync(string tenantId);
 
     /// <summary>
+    /// Cloud Mode: returns historical scan summaries from Azure Blob Storage.
+    /// Local Mode: returns empty (local history is read directly from HistoryRepository).
+    /// </summary>
+    Task<IReadOnlyList<ScanHistoryEntry>> GetHistoryAsync(string tenantId, int maxEntries = 60);
+
+    /// <summary>
     /// Cloud Mode: sends a test mail via the Azure Function (POST /api/notifications/test).
     /// Local Mode: not supported — returns false.
     /// </summary>

@@ -205,11 +205,11 @@ else
         "exp30"    => "Secrets expiring within 30 days",
         "exp90"    => "Secrets expiring within 90 days",
         "highrisk" => "High / Critical apps",
-        _          => "Urgent attention",
+        _          => "All App Registrations",
     };
 
     private List<AppRegistrationSummary> UrgentApps => _filter == "all"
-        ? (_apps?.Where(a => a.RiskLevel is "Critical" or "High").ToList() ?? new())
+        ? (_apps?.ToList() ?? new())
         : GetFilteredApps();
 
     private void SetFilter(string filter)
@@ -257,7 +257,7 @@ else
         var history = await HistoryRepo.GetHistoryAsync(localTenant.TenantId, maxEntries: 1);
         if (history.Count > 0)
         {
-            _apps = history[0].Apps.ToList();
+            _apps = history[0].Apps?.ToList() ?? new();
             _fromCache = true;
             ComputeStats();
         }

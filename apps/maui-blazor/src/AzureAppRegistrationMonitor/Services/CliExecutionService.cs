@@ -80,6 +80,13 @@ public class CliExecutionService
 
     private async Task<(string Stdout, int ExitCode)> ExecuteAsync(string binary, string[] args)
     {
+        // .cmd files cannot be directly launched with UseShellExecute=false — cmd.exe must run them.
+        if (binary.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            args   = new[] { "/c", binary }.Concat(args).ToArray();
+            binary = "cmd.exe";
+        }
+
         var psi = new ProcessStartInfo
         {
             FileName = binary,
@@ -129,11 +136,14 @@ public class CliExecutionService
     /// </summary>
     private (string Binary, string? Script) FindBinary()
     {
-        // 1a. Bundled cli/ subfolder (ADR-0007): node.exe + aarm.mjs alongside the MAUI exe
+        // 1a. Bundled cli/ subfolder (ADR-0007): node.exe + aarm.mjs/aarm.js alongside the MAUI exe
+        //     publish-local.ps1 copies aarm.mjs as aarm.js — accept both names.
         var appDir = Path.GetDirectoryName(Environment.ProcessPath) ?? ".";
-        var bundledNode   = Path.Combine(appDir, "cli", "node.exe");
-        var bundledScript = Path.Combine(appDir, "cli", "aarm.mjs");
-        if (File.Exists(bundledNode) && File.Exists(bundledScript))
+        var bundledNode = Path.Combine(appDir, "cli", "node.exe");
+        var bundledScript = new[] { "aarm.mjs", "aarm.js" }
+            .Select(n => Path.Combine(appDir, "cli", n))
+            .FirstOrDefault(File.Exists);
+        if (File.Exists(bundledNode) && bundledScript is not null)
             return (bundledNode, bundledScript);
 
         // 1b. Native aarm binary alongside the MAUI executable
@@ -166,8 +176,45 @@ public class CliExecutionService
             if (node is not null) return (node, envScript);
         }
 
-        // 5. PATH fallback — npm link or global install
-        return ("aarm", null);
+        // 5. PATH fallback — use 'where' / 'which' to resolve the full path incl. .cmd extension
+        var resolved = ResolveFromPath("aarm");
+        return (resolved ?? "aarm", null);
+    }
+
+    /// <summary>
+    /// Uses 'where.exe' (Windows) or 'which' (Unix) to find the full path of a CLI tool,
+    /// preferring .cmd over .exe on Windows so that the .cmd wrapper can be launched
+    /// via cmd.exe /c in ExecuteAsync.
+    /// </summary>
+    private static string? ResolveFromPath(string name)
+    {
+        var candidates = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? new[] { name + ".cmd", name + ".exe", name }
+            : new[] { name };
+
+        var locator = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "where.exe" : "which";
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                using var p = Process.Start(new ProcessStartInfo
+                {
+                    FileName  = locator,
+                    Arguments = candidate,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow  = true,
+                });
+                p?.WaitForExit(2_000);
+                if (p?.ExitCode == 0)
+                {
+                    var line = p.StandardOutput.ReadLine()?.Trim();
+                    if (!string.IsNullOrEmpty(line)) return line;
+                }
+            }
+            catch { /* ignore */ }
+        }
+        return null;
     }
 
     private static string? FindNodeExe()

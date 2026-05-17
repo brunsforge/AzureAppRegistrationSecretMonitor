@@ -737,9 +737,12 @@ else
         };
         _cfTeamsStatus = _cfTeamsAlerts = _cfTeamsErrors = "";
         _cfTplCritical = _cfTplExpiring = _cfTplSummary = _cfTplError = "";
-        _cfMailTo = "";
-        _cfMailSendExpiring = true; _cfMailSendCritical = true;
-        _cfMailSendStatus = false;  _cfMailSendError = true;
+        var notif = t.Notifications;
+        _cfMailTo           = notif?.MailTo is { Count: > 0 } ml ? string.Join(", ", ml) : "";
+        _cfMailSendExpiring = notif?.MailExpiring ?? true;
+        _cfMailSendCritical = notif?.MailCritical ?? true;
+        _cfMailSendStatus   = notif?.MailStatus   ?? false;
+        _cfMailSendError    = notif?.MailError     ?? true;
         _cfExpiringDays = 30; _cfCriticalDays = 7;
         _cloudEditTenantId = t.TenantId;
         _cloudFormError    = null;

@@ -55,6 +55,9 @@ public class DelegatingDataProvider : IDataProvider
     public Task<bool> DeleteTenantAsync(string tenantId)
         => _inner.DeleteTenantAsync(tenantId);
 
+    public Task<IReadOnlyList<ScanHistoryEntry>> GetHistoryAsync(string tenantId, int maxEntries = 60)
+        => _inner.GetHistoryAsync(tenantId, maxEntries);
+
     public Task<bool> SendTestMailAsync(string templateKey, string[] to, Dictionary<string, string> demoData)
         => _inner.SendTestMailAsync(templateKey, to, demoData);
 

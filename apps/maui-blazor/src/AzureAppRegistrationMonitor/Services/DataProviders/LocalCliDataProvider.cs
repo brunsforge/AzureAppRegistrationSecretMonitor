@@ -79,6 +79,9 @@ public class LocalCliDataProvider : IDataProvider
         return profile;
     }
 
+    public Task<IReadOnlyList<ScanHistoryEntry>> GetHistoryAsync(string tenantId, int maxEntries = 60)
+        => Task.FromResult<IReadOnlyList<ScanHistoryEntry>>(Array.Empty<ScanHistoryEntry>());
+
     public Task<bool> SendTestMailAsync(string templateKey, string[] to, Dictionary<string, string> demoData)
         => Task.FromResult(false);
 

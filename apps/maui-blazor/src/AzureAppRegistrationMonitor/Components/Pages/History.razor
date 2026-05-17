@@ -39,18 +39,9 @@ else if (_error is not null)
 else if (_history is null || _history.Count == 0)
 {
     <div class="aarm-empty">
-        @if (SettingsSvc.Settings.AppMode == "cloud")
+        <p>No scan history yet for this tenant.</p>
+        @if (SettingsSvc.Settings.AppMode != "cloud")
         {
-            <p>Local scan history is not available in Cloud Mode.</p>
-            <p style="font-size:.82rem;color:var(--text-muted)">
-                Scan results are stored in Azure Blob Storage by the Azure Function.
-                Use the <a href="@(SettingsSvc.Settings.CloudBaseUri)/api/dashboard" target="_blank" rel="noopener" style="color:var(--accent)">Cloud Dashboard ↗</a>
-                to view historical data.
-            </p>
-        }
-        else
-        {
-            <p>No scan history yet for this tenant.</p>
             <p>Run a scan from the <a href="/dashboard">Dashboard</a> to start building history.</p>
         }
     </div>
@@ -143,10 +134,20 @@ else
         _error = null;
         try
         {
-            var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
-            if (tenant is null) { _error = $"Tenant \"{_selectedTenant}\" not found."; return; }
-            var entries = await HistoryRepo.GetHistoryAsync(tenant.TenantId);
-            _history = entries.ToList();
+            if (SettingsSvc.Settings.AppMode == "cloud")
+            {
+                var tenant = _tenants.FirstOrDefault(t => t.DisplayName == _selectedTenant);
+                if (tenant is null) { _error = $"Tenant \"{_selectedTenant}\" not found."; return; }
+                var entries = await DataProvider.GetHistoryAsync(tenant.TenantId);
+                _history = entries.ToList();
+            }
+            else
+            {
+                var tenant = await TenantRepo.GetTenantAsync(_selectedTenant);
+                if (tenant is null) { _error = $"Tenant \"{_selectedTenant}\" not found."; return; }
+                var entries = await HistoryRepo.GetHistoryAsync(tenant.TenantId);
+                _history = entries.ToList();
+            }
         }
         catch (Exception ex) { _error = ex.Message; }
         finally { _loading = false; }

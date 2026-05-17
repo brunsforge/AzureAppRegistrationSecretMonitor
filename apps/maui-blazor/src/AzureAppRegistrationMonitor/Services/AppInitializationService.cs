@@ -40,7 +40,8 @@ public class AppInitializationService
     public bool SetupRequired =>
         !_settings.Settings.SetupCompleted
         || (_settings.Settings.AppMode == "cloud"
-            && string.IsNullOrWhiteSpace(_settings.Settings.CloudBaseUri));
+            && (string.IsNullOrWhiteSpace(_settings.Settings.CloudBaseUri)
+                || string.IsNullOrWhiteSpace(_credentials.GetCloudFunctionKey())));
 
     public bool IsInitialized { get; private set; }
 
@@ -88,9 +89,10 @@ public class AppInitializationService
                     new CloudHttpDataProvider(_settings.Settings.CloudBaseUri, key));
                 return;
             }
+            // Key missing from Credential Manager — SetupRequired will catch this and
+            // show the setup screen so the user can re-enter the key.
         }
 
-        // Default: local provider (already the DI default, but explicit for clarity)
         _dataProvider.SetProvider(_localProvider);
     }
 

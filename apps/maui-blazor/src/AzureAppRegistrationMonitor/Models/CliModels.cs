@@ -37,6 +37,7 @@ public record TenantNotificationChannels(
     [property: JsonPropertyName("teamsAlerts")]  bool TeamsAlerts,
     [property: JsonPropertyName("teamsErrors")]  bool TeamsErrors,
     [property: JsonPropertyName("mailCount")]    int  MailCount,
+    [property: JsonPropertyName("mailTo")]       IReadOnlyList<string>? MailTo,
     [property: JsonPropertyName("mailCritical")] bool MailCritical,
     [property: JsonPropertyName("mailExpiring")] bool MailExpiring,
     [property: JsonPropertyName("mailStatus")]   bool MailStatus,

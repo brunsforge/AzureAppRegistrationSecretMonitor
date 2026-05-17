@@ -82,5 +82,5 @@ public record ScanHistoryEntry(
     int SecretCount,
     int ExpiredCount,
     int ExpiringCount,
-    IReadOnlyList<AppRegistrationSummary> Apps
+    IReadOnlyList<AppRegistrationSummary>? Apps = null
 );

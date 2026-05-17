@@ -120,6 +120,30 @@ async function preflightHandler(req: HttpRequest, context: InvocationContext): P
   }
 }
 
+// ── GET /api/tenants/{tenantId}/history ──────────────────────────────────────
+
+app.http('tenantHistory', {
+  methods: ['GET'],
+  route: 'tenants/{tenantId}/history',
+  authLevel: 'function',
+  handler: historyHandler,
+});
+
+async function historyHandler(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  const tenantId = req.params['tenantId'];
+  const limitParam = req.query.get('limit');
+  const limit = limitParam ? Math.min(parseInt(limitParam, 10) || 60, 200) : 60;
+  try {
+    const job = await findPrimaryJob(tenantId);
+    if (!job) return json({ error: `No job configured for tenant ${tenantId}` }, 404);
+    const summaries = await getResultStore().listHistory(tenantId, limit);
+    return json(summaries);
+  } catch (err) {
+    context.error(`History fetch failed: ${err}`);
+    return json({ error: String(err) }, 500);
+  }
+}
+
 // ── POST /api/tenants/{tenantId}/scan ─────────────────────────────────────────
 // Triggers an immediate scan for this tenant and sends Teams notifications
 // according to the job configuration, just like the scheduled timer trigger.
@@ -192,6 +216,7 @@ interface NotificationChannelSummary {
   teamsAlerts: boolean;
   teamsErrors: boolean;
   mailCount: number;
+  mailTo: string[];
   mailCritical: boolean;
   mailExpiring: boolean;
   mailStatus: boolean;
@@ -205,6 +230,7 @@ function buildNotificationSummary(job: JobConfig): NotificationChannelSummary {
     teamsAlerts: !!(job.teamsWebhooks?.alerts),
     teamsErrors: !!(job.teamsWebhooks?.errors),
     mailCount:   mail?.to?.length ?? 0,
+    mailTo:      mail?.to ?? [],
     mailCritical: mail ? (mail.sendOnCritical ?? true) : false,
     mailExpiring: mail ? (mail.sendOnExpiring ?? true) : false,
     mailStatus:   mail ? (mail.sendOnStatus   ?? false) : false,

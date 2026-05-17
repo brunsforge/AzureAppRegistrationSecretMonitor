@@ -99,6 +99,25 @@ public class CloudHttpDataProvider : IDataProvider
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<IReadOnlyList<ScanHistoryEntry>> GetHistoryAsync(string tenantId, int maxEntries = 60)
+    {
+        var response = await _http.GetAsync($"tenants/{tenantId}/history?limit={maxEntries}");
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return Array.Empty<ScanHistoryEntry>();
+        await EnsureSuccessAsync(response);
+        var json = await response.Content.ReadAsStringAsync();
+        var items = JsonSerializer.Deserialize<List<CloudHistorySummary>>(json, JsonOptions)
+                    ?? new List<CloudHistorySummary>();
+        return items.Select(x => new ScanHistoryEntry(
+            TenantId:     tenantId,
+            ScannedAt:    x.ScannedAt,
+            AppCount:     x.AppCount,
+            SecretCount:  x.SecretCount,
+            ExpiredCount: x.ExpiredCount,
+            ExpiringCount: x.ExpiringCount
+        )).ToList();
+    }
+
     public async Task<bool> SendTestMailAsync(string templateKey, string[] to, Dictionary<string, string> demoData)
     {
         var content = Serialize(new { channel = "mail", templateKey, to, demoData });
@@ -150,4 +169,18 @@ public class CloudHttpDataProvider : IDataProvider
     private static StringContent Serialize<T>(T obj) =>
         new(JsonSerializer.Serialize(obj, JsonOptions),
             System.Text.Encoding.UTF8, "application/json");
+}
+
+file sealed class CloudHistorySummary
+{
+    [System.Text.Json.Serialization.JsonPropertyName("scannedAt")]
+    public string ScannedAt { get; init; } = "";
+    [System.Text.Json.Serialization.JsonPropertyName("appCount")]
+    public int AppCount { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("secretCount")]
+    public int SecretCount { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("expiredCount")]
+    public int ExpiredCount { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("expiringCount")]
+    public int ExpiringCount { get; init; }
 }
