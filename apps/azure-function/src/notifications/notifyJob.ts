@@ -1,6 +1,6 @@
 import type { InvocationContext } from '@azure/functions';
 import { TemplateLoader } from './TemplateLoader.js';
-import { renderTemplate } from './NotificationRenderer.js';
+import { renderTemplate, renderHtmlTemplate } from './NotificationRenderer.js';
 import { postToTeams } from './TeamsNotifier.js';
 import { sendMail, isAcsConfigured } from './AcsMailSender.js';
 import { evaluateThresholds } from './ThresholdEvaluator.js';
@@ -117,7 +117,7 @@ async function notifyMail(
 ): Promise<void> {
   try {
     const template = await loader.loadMail(key, customBlob);
-    const html     = renderTemplate(template, ctx as never) as string;
+    const html     = renderHtmlTemplate(template, ctx as never);
     await sendMail(to, subject, html);
   } catch (err) {
     invCtx.warn(`Mail notification (${key}) failed: ${err}`);
