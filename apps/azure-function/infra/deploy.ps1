@@ -33,7 +33,7 @@
 #     prevents all function registrations
 
 param(
-    [Parameter(Mandatory)][string]$ResourceGroup,
+    [string]$ResourceGroup   = 'aarm-dev-rg',
     [string]$Prefix         = 'aarm',
     [string]$Environment    = 'dev',
     [string]$Location       = 'westeurope',

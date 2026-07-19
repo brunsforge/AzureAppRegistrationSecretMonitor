@@ -233,7 +233,7 @@ function buildNotificationSummary(job: JobConfig): NotificationChannelSummary {
     mailTo:      mail?.to ?? [],
     mailCritical: mail ? (mail.sendOnCritical ?? true) : false,
     mailExpiring: mail ? (mail.sendOnExpiring ?? true) : false,
-    mailStatus:   mail ? (mail.sendOnStatus   ?? false) : false,
+    mailStatus:   mail ? (mail.sendOnStatus   ?? true) : false,
     mailError:    mail ? (mail.sendOnError     ?? true) : false,
   };
 }

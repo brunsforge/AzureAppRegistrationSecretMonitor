@@ -38,9 +38,14 @@ export async function sendMail(
   lazyLoad();
   const client = new EmailClientClass(connStr);
 
+  const addresses = to
+    .flatMap(a => a.split(/[;,]/))
+    .map(a => a.trim())
+    .filter(Boolean);
+
   const poller = await client.beginSend({
     senderAddress: sender,
-    recipients:    { to: to.map(address => ({ address })) },
+    recipients:    { to: addresses.map(address => ({ address })) },
     content:       { subject, html },
   });
 

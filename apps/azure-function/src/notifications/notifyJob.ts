@@ -43,6 +43,9 @@ export async function sendSuccessNotifications(
   }
 
   // ── Mail notifications ─────────────────────────────────────────────────────
+  if (job.mailTargets?.to.length && !isAcsConfigured()) {
+    context.warn(`Job "${job.id}": mailTargets configured but ACS is not (AARM_ACS_CONNECTION_STRING / AARM_ACS_SENDER_EMAIL missing)`);
+  }
   if (job.mailTargets?.to.length && isAcsConfigured()) {
     const mt = job.mailTargets;
     if (mt.sendOnCritical !== false && thresholds.hasCritical) {
