@@ -116,26 +116,32 @@ Write-Host "[3/4] Bundling CLI into $CliBundle ..." -ForegroundColor Yellow
 
 New-Item -ItemType Directory -Path $CliBundle -Force | Out-Null
 
-# aarm.js
+# aarm.mjs  (keep the .mjs extension: the bundle is ESM and node runs a bare
+# .js file as CommonJS, which fails on the ESM syntax)
 $AarmJs = Join-Path $CliDist "aarm.mjs"
 if (-not (Test-Path $AarmJs)) {
-    throw "aarm.js not found at $AarmJs  -  run 'npm run build' in packages/cli first."
+    throw "aarm.mjs not found at $AarmJs  -  run 'npm run build' in packages/cli first."
 }
-Copy-Item $AarmJs (Join-Path $CliBundle "aarm.js")
-Write-Host "      aarm.js copied" -ForegroundColor Green
+Copy-Item $AarmJs (Join-Path $CliBundle "aarm.mjs")
+Write-Host "      aarm.mjs copied" -ForegroundColor Green
 
-# keytar native module
-$KeytarSrc = Join-Path $CliDir "node_modules\keytar"
-if (Test-Path $KeytarSrc) {
+# keytar native module.
+# npm workspaces hoist keytar to the repo-root node_modules, so look there too.
+$KeytarSrc = @(
+    (Join-Path $CliDir "node_modules\keytar"),
+    (Join-Path $Root   "node_modules\keytar")
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if ($KeytarSrc) {
     $KeytarDest  = Join-Path $CliBundle "node_modules\keytar"
     $KeytarBuild = Join-Path $KeytarDest "build\Release"
     New-Item -ItemType Directory -Path $KeytarBuild -Force | Out-Null
 
-    foreach ($file in @("package.json", "index.js")) {
-        $src = Join-Path $KeytarSrc $file
-        if (Test-Path $src) {
-            Copy-Item $src (Join-Path $KeytarDest $file)
-        }
+    # package.json + the lib/ dir it points at via "main" (keytar 7.x: lib/keytar.js)
+    Copy-Item (Join-Path $KeytarSrc "package.json") (Join-Path $KeytarDest "package.json") -Force
+    $KeytarLib = Join-Path $KeytarSrc "lib"
+    if (Test-Path $KeytarLib) {
+        Copy-Item $KeytarLib (Join-Path $KeytarDest "lib") -Recurse -Force
     }
 
     $nativeNode = Get-ChildItem (Join-Path $KeytarSrc "build\Release\keytar.node") -ErrorAction SilentlyContinue |
@@ -143,12 +149,12 @@ if (Test-Path $KeytarSrc) {
 
     if ($nativeNode) {
         Copy-Item $nativeNode.FullName (Join-Path $KeytarBuild "keytar.node")
-        Write-Host "      keytar.node copied" -ForegroundColor Green
+        Write-Host "      keytar.node copied (from $KeytarSrc)" -ForegroundColor Green
     } else {
         Write-Warning "keytar.node not found  -  credential storage may not work."
     }
 } else {
-    Write-Warning "keytar not found in node_modules. Run 'npm install' in packages/cli."
+    Write-Warning "keytar not found in node_modules. Run 'npm install' at the repo root."
 }
 
 # node.exe

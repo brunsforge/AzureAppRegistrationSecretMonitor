@@ -136,8 +136,8 @@ public class CliExecutionService
     /// </summary>
     private (string Binary, string? Script) FindBinary()
     {
-        // 1a. Bundled cli/ subfolder (ADR-0007): node.exe + aarm.mjs/aarm.js alongside the MAUI exe
-        //     publish-local.ps1 copies aarm.mjs as aarm.js — accept both names.
+        // 1a. Bundled cli/ subfolder (ADR-0007): node.exe + aarm.mjs alongside the MAUI exe.
+        //     publish-local.ps1 bundles it as aarm.mjs; aarm.js is accepted as a legacy fallback.
         var appDir = Path.GetDirectoryName(Environment.ProcessPath) ?? ".";
         var bundledNode = Path.Combine(appDir, "cli", "node.exe");
         var bundledScript = new[] { "aarm.mjs", "aarm.js" }
